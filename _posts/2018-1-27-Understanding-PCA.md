@@ -26,16 +26,20 @@ There are two ways of defining the optimization problem of PCA, we’ll look at 
 
 Consider the inverse transformation $P^{−1}$. Given that we know that $P$ is essentially a set of directions over which we project our vectors, we can take that $P$ is a orthogonal matrix. Thus, we can say that $P^{−1}=P^{T}$.
 
-For some vector $x$, the projection is $x^{\prime} = P \cdot x$. Thus, the reconstructed $x$, let’s call it x^{\cap}, would be
-$$ x^{\cap} = P^{-1} x^{\prime}$$
-$$ x^{\cap} = P^{T} x^{\prime}$$
-$$ x^{\cap} = P^{T} P x^{\prime}$$
+For some vector $x$, the projection is $x^{\prime} = Px$. Thus, the reconstructed $x$, let’s call it $\hat{x}$, would be
 
-It’s now apparent that we wish to minimize the reconstruction loss that encurred because of projection and backprojection due to $P$. (say, $||x − x^{\cap}||$).
+$$ \hat{x} = P^{-1} x^{\prime}$$
+
+$$ \hat{x} = P^{T} x^{\prime}$$
+
+$$ \hat{x} = P^{T} P x^{\prime}$$
+
+It’s now apparent that we wish to minimize the reconstruction loss that encurred because of projection and backprojection due to $P$. (say, $||x − \hat{x}||$).
 
 However, for simplicity, **let’s assume we wish to find just one direction, let’s call it $p$**. We’ll get rid of this assumption later. Also, we will use the whole dataset instead of one sample. Thus, we can formulate an optimization problem as the following,
 
 $$ \mathbf{min} \quad || X - (Xp)p^{T} || $$
+
 $$ s.t. \quad\quad p^{T}p = 1 $$
 
 Convince yourself that this is equivalent to the reconstruction loss mentioned above. Also, the constraint just implies the direction $p$ to be found should be a unit vector. This is because any scaled version of $p$ will also correspond to a solution.
@@ -49,29 +53,45 @@ Why is this a good idea? Because, **maximum discriminability is obtained in the 
 Say $X^{\prime} = Xp$ where $p$ is that direction of maximum variance. Thus, we can write the optimization as,
 
 $$ \mathbf{max} \quad ||X^{\prime}||^{2} $$
+
 $$ \mathbf{max} \quad ||Xp||^{2} \quad s.t. \quad p^{T}p = 1 $$
+
 $$ \mathbf{max} \quad tr((Xp)^{T}(Xp)) \quad s.t. \quad p^{T}p = 1 $$
+
 $$ \mathbf{max} \quad tr(p^{T}X^{T}Xp) \quad s.t. \quad p^{T}p = 1 $$
+
 $$ \mathbf{max} \quad p^{T}X^{T}Xp \quad s.t. \quad p^{T}p = 1 $$
+
 $$ \mathbf{max} \quad p^{T}Sp \quad s.t. \quad p^{T}p = 1 $$
 
-Here, $$S = X^{T}X$$ is called the scatter matrix (or the unnormalized covariance matrix). It’s important to remember the data is zero centred and the equation is pretty similar otherwise.
+Here, $S = X^{T}X$ is called the scatter matrix (or the unnormalized covariance matrix). It’s important to remember the data is zero centred and the equation is pretty similar otherwise.
 
 ### Proof of Equivalence
 
 Now, a little bit of linear algebra to show that they are equivalent. Let’s start with the first formulation and show that it’s equivalent to the second formulation.
 
 $$ \mathbf{min} \quad || X - (Xp)p^{T} ||  \quad s.t. \quad p^{T}p = 1 $$
+
 $$ \mathbf{min} \quad || X - (Xp)p^{T} ||^{2}  \quad s.t. \quad p^{T}p = 1 $$
+
 $$ \mathbf{min} \quad tr((X - (Xp)p^{T})(X - (Xp)p^{T})^{T}) \quad s.t. \quad p^{T}p = 1 $$
+
 $$ \mathbf{min} \quad tr((X - (Xp)p^{T})(X^{T} - pp^{T}X^{T})) \quad s.t. \quad p^{T}p = 1 $$
+
 $$ \mathbf{min} \quad tr(XX^{T} - 2Xpp^{T}X^{T} + Xp(p^{T}p)p^{T}X^{T}) \quad s.t. \quad p^{T}p = 1 $$
+
 $$ \mathbf{min} \quad tr(XX^{T} - Xpp^{T}X^{T}) \quad s.t. \quad p^{T}p = 1 $$
+
 $$ \mathbf{min} \quad tr(XX^{T}) - tr(Xpp^{T}X^{T}) \quad s.t. \quad p^{T}p = 1 $$
+
 $$ \mathbf{min} \quad -tr(Xpp^{T}X^{T}) \quad s.t. \quad p^{T}p = 1 $$
+
 $$ \mathbf{min} \quad -tr(p^{T}X^{T}Xp) \quad s.t. \quad p^{T}p = 1 $$
+
 $$ \mathbf{max} \quad tr(p^{T}X^{T}Xp) \quad s.t. \quad p^{T}p = 1 $$
+
 $$ \mathbf{max} \quad p^{T}X^{T}Xp \quad s.t. \quad p^{T}p = 1 $$
+
 $$ \mathbf{max} \quad p^{T}Sp \quad s.t. \quad p^{T}p = 1 $$
 
 Honestly, I’m much more convinced that the direction we are trying to find has the lowest reconstruction loss rather than looking at it as co-variance maximization problem.
@@ -91,21 +111,25 @@ We can consider the objective as $L(p,\lambda) = p^{T}Sp - \lambda(p^{T}p - 1)$ 
 Taking partial with respect to $\lambda$ and setting as zero,
 
 $$ \frac{\partial L}{\partial \lambda} = 0 $$
+
 $$ \Longrightarrow \quad p^{T}p - 1 = 0 $$
 
 Taking partial with respect to $p$ and setting as zero,
 
 $$ \frac{\partial L}{\partial p} = 0 $$
+
 $$ \Longrightarrow \quad 2Sp - 2\lambda p = 0  \quad \Longrightarrow \quad Sp = \lambda p $$
 
 Using both the equation and plugging in $L(p, \lambda)$,
 
 $$ L(p, \lambda) = p^{T}(Sp) - \lambda(p^{T}p - 1) $$
+
 $$ = p^{T}\lambda\p - \lambda(1 - 1) = \lambda p^{T}p = \lambda $$
 
 Thus, the optimization reduces to,
 
 $$ \mathbf{max} \quad \lambda $$
+
 $$ s.t. \quad Sp = \lambda p $$
 
 which is essentially finding the eigenvector $p$ of scatter matrix $S$ corresponding to the maximum eigenvalue $\lambda$. Now, we can discard our assumption of finding only one direction. To find the $k$ directions, all we need is to find the eigenvectors corresponding to the each of the $k$ eigenvalues sorted in descending order.
@@ -114,10 +138,10 @@ which is essentially finding the eigenvector $p$ of scatter matrix $S$ correspon
 
 Thus the algorithm can implemented simply as,
 
-``
+```
 def pca(X, k):
     cov = np.cov(X)
     w, v = np.linalg.eig(cov)
     w, v = sort_vecs(w, v, reverse=True)
     return v[:k]
-``
+```
