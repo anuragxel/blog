@@ -124,7 +124,7 @@ Using both the equation and plugging in $L(p, \lambda)$,
 
 $$ L(p, \lambda) = p^{T}(Sp) - \lambda(p^{T}p - 1) $$
 
-$$ = p^{T}\lambda\p - \lambda(1 - 1) = \lambda p^{T}p = \lambda $$
+$$ = p^{T}\lambda p - \lambda(1 - 1) = \lambda p^{T}p = \lambda $$
 
 Thus, the optimization reduces to,
 
