@@ -54,15 +54,15 @@ Say $X^{\prime} = Xp$ where $p$ is that direction of maximum variance. Thus, we 
 
 $$ \mathbf{max} \quad ||X^{\prime}||^{2} $$
 
-$$ \mathbf{max} \quad ||Xp||^{2} \quad s.t. \quad p^{T}p = 1 $$
+$$ = \mathbf{max} \quad ||Xp||^{2} \quad s.t. \quad p^{T}p = 1 $$
 
-$$ \mathbf{max} \quad tr((Xp)^{T}(Xp)) \quad s.t. \quad p^{T}p = 1 $$
+$$ = \mathbf{max} \quad tr((Xp)^{T}(Xp)) \quad s.t. \quad p^{T}p = 1 $$
 
-$$ \mathbf{max} \quad tr(p^{T}X^{T}Xp) \quad s.t. \quad p^{T}p = 1 $$
+$$ = \mathbf{max} \quad tr(p^{T}X^{T}Xp) \quad s.t. \quad p^{T}p = 1 $$
 
-$$ \mathbf{max} \quad p^{T}X^{T}Xp \quad s.t. \quad p^{T}p = 1 $$
+$$ = \mathbf{max} \quad p^{T}X^{T}Xp \quad s.t. \quad p^{T}p = 1 $$
 
-$$ \mathbf{max} \quad p^{T}Sp \quad s.t. \quad p^{T}p = 1 $$
+$$ = \mathbf{max} \quad p^{T}Sp \quad s.t. \quad p^{T}p = 1 $$
 
 Here, $S = X^{T}X$ is called the scatter matrix (or the unnormalized covariance matrix). It’s important to remember the data is zero centred and the equation is pretty similar otherwise.
 
@@ -72,27 +72,27 @@ Now, a little bit of linear algebra to show that they are equivalent. Let’s st
 
 $$ \mathbf{min} \quad || X - (Xp)p^{T} ||  \quad s.t. \quad p^{T}p = 1 $$
 
-$$ \mathbf{min} \quad || X - (Xp)p^{T} ||^{2}  \quad s.t. \quad p^{T}p = 1 $$
+$$ = \mathbf{min} \quad || X - (Xp)p^{T} ||^{2}  \quad s.t. \quad p^{T}p = 1 $$
 
-$$ \mathbf{min} \quad tr((X - (Xp)p^{T})(X - (Xp)p^{T})^{T}) \quad s.t. \quad p^{T}p = 1 $$
+$$ = \mathbf{min} \quad tr((X - (Xp)p^{T})(X - (Xp)p^{T})^{T}) \quad s.t. \quad p^{T}p = 1 $$
 
-$$ \mathbf{min} \quad tr((X - (Xp)p^{T})(X^{T} - pp^{T}X^{T})) \quad s.t. \quad p^{T}p = 1 $$
+$$ = \mathbf{min} \quad tr((X - (Xp)p^{T})(X^{T} - pp^{T}X^{T})) \quad s.t. \quad p^{T}p = 1 $$
 
-$$ \mathbf{min} \quad tr(XX^{T} - 2Xpp^{T}X^{T} + Xp(p^{T}p)p^{T}X^{T}) \quad s.t. \quad p^{T}p = 1 $$
+$$ = \mathbf{min} \quad tr(XX^{T} - 2Xpp^{T}X^{T} + Xp(p^{T}p)p^{T}X^{T}) \quad s.t. \quad p^{T}p = 1 $$
 
-$$ \mathbf{min} \quad tr(XX^{T} - Xpp^{T}X^{T}) \quad s.t. \quad p^{T}p = 1 $$
+$$ = \mathbf{min} \quad tr(XX^{T} - Xpp^{T}X^{T}) \quad s.t. \quad p^{T}p = 1 $$
 
-$$ \mathbf{min} \quad tr(XX^{T}) - tr(Xpp^{T}X^{T}) \quad s.t. \quad p^{T}p = 1 $$
+$$ = \mathbf{min} \quad tr(XX^{T}) - tr(Xpp^{T}X^{T}) \quad s.t. \quad p^{T}p = 1 $$
 
-$$ \mathbf{min} \quad -tr(Xpp^{T}X^{T}) \quad s.t. \quad p^{T}p = 1 $$
+$$ = \mathbf{min} \quad -tr(Xpp^{T}X^{T}) \quad s.t. \quad p^{T}p = 1 $$
 
-$$ \mathbf{min} \quad -tr(p^{T}X^{T}Xp) \quad s.t. \quad p^{T}p = 1 $$
+$$ = \mathbf{min} \quad -tr(p^{T}X^{T}Xp) \quad s.t. \quad p^{T}p = 1 $$
 
-$$ \mathbf{max} \quad tr(p^{T}X^{T}Xp) \quad s.t. \quad p^{T}p = 1 $$
+$$ = \mathbf{max} \quad tr(p^{T}X^{T}Xp) \quad s.t. \quad p^{T}p = 1 $$
 
-$$ \mathbf{max} \quad p^{T}X^{T}Xp \quad s.t. \quad p^{T}p = 1 $$
+$$ = \mathbf{max} \quad p^{T}X^{T}Xp \quad s.t. \quad p^{T}p = 1 $$
 
-$$ \mathbf{max} \quad p^{T}Sp \quad s.t. \quad p^{T}p = 1 $$
+$$ = \mathbf{max} \quad p^{T}Sp \quad s.t. \quad p^{T}p = 1 $$
 
 Honestly, I’m much more convinced that the direction we are trying to find has the lowest reconstruction loss rather than looking at it as co-variance maximization problem.
 
