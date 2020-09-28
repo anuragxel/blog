@@ -34,7 +34,7 @@ $$ \hat{x} = P^{T} x^{\prime}$$
 
 $$ \hat{x} = P^{T} P x^{\prime}$$
 
-It’s now apparent that we wish to minimize the reconstruction loss that encurred because of projection and backprojection due to $P$. (say, $||x − \hat{x}||$).
+It’s now apparent that we wish to minimize the reconstruction loss that encurred because of projection and backprojection due to $P$. (say, $ || x − \hat{x} || $).
 
 However, for simplicity, **let’s assume we wish to find just one direction, let’s call it $p$**. We’ll get rid of this assumption later. Also, we will use the whole dataset instead of one sample. Thus, we can formulate an optimization problem as the following,
 
