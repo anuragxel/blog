@@ -10,7 +10,7 @@ export PATH   := $(USER_GEM_BIN):$(PATH)
 HOST ?= 127.0.0.1
 PORT ?= 4000
 
-.PHONY: help install serve serve-prod build clean new publish
+.PHONY: help install serve serve-prod build clean new publish resolve-cites
 
 help:
 	@echo "Blog targets:"
@@ -23,7 +23,14 @@ help:
 	@echo ""
 	@echo "  make new title='My Post'    create _drafts/YYYY-MM-DD-my-post.md"
 	@echo "  make publish file=NAME.md   move _drafts/NAME.md → _posts/<today>-NAME.md"
+	@echo "  make resolve-cites          fill url={...} for new bib entries (arxiv + Semantic Scholar)"
 	@echo ""
+
+resolve-cites:
+	@command -v python3 >/dev/null || { echo "python3 not found"; exit 1; }
+	@python3 -c 'import bibtexparser' 2>/dev/null \
+	  || { echo "installing tools/requirements.txt..."; python3 -m pip install --user -r tools/requirements.txt; }
+	python3 tools/resolve_urls.py
 
 install:
 	bundle config set --local path 'vendor/bundle'

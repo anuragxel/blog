@@ -44,6 +44,12 @@ these over typing `bundle exec jekyll ...` directly.
   Adding new refs = paste BibTeX into `references.bib`; abbreviated `booktitle={CVPR}`
   is preserved as-is. `_plugins/citation_format.rb` cleans up the IEEE CSL's
   missing space after `[N]`.
+- **Clickable titles:** entries with a `url={...}` field render their title as a
+  link in the bibliography (`_plugins/citation_links.rb` handles wrapping and
+  strips IEEE's `Available at:` duplicate). To fill URLs in bulk:
+  `make resolve-cites` runs `tools/resolve_urls.py` (arXiv ID detection +
+  Semantic Scholar lookup). Manual `url=` fields always win — paste those for
+  project pages.
 - **Frontmatter:** `layout: post`, `title:`, optional `description:` (used in index
   card and `og:description`). Date comes from the filename (`YYYY-MM-DD-slug.md`).
 

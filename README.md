@@ -58,6 +58,20 @@ whole bib). Style is IEEE numeric `[1]`. Drop new BibTeX entries straight
 into `references.bib` — the abbreviated `booktitle={CVPR}` format renders
 as-is, no expansion.
 
+#### Clickable titles
+
+If a bib entry has a `url={...}` field, the title in the rendered
+bibliography becomes a link to it. Two ways to populate URLs:
+
+- **Manual (preferred for project pages):** paste `url=https://project-page.com`
+  into the entry. Always wins over auto-resolution.
+- **Auto:** `make resolve-cites` runs `tools/resolve_urls.py`, which fills
+  missing `url=` fields. Order: arXiv ID embedded in journal/note/booktitle
+  → Semantic Scholar lookup. Skip-and-print for entries it can't resolve.
+
+The script is rate-limited (~3.5s/req with backoff on 429) since
+Semantic Scholar's free tier is bursty. Re-run if some entries get skipped.
+
 ## Deployment
 
 Pushing to `gh-pages` triggers `.github/workflows/pages.yml`, which builds with Jekyll 4 and deploys via the official GitHub Pages Actions.
