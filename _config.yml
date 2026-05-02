@@ -13,6 +13,17 @@ baseurl: "/blog"
 home_url: "https://anuragxel.github.io/"
 github_username: anuragxel
 
+twitter:
+  card: summary
+  username: anuragxel
+
+# Default frontmatter — gives every page an og:image / twitter:image
+defaults:
+  - scope:
+      path: ""
+    values:
+      image: https://anuragxel.github.io/tn/images/profile.jpeg
+
 permalink: /:title/
 timezone: America/New_York
 

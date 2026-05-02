@@ -11,21 +11,33 @@ bundle exec jekyll serve --livereload
 
 Site renders at <http://localhost:4000/blog/>.
 
-## Adding a post
+## Authoring
 
-Drop a markdown file in `_posts/` named `YYYY-MM-DD-title.md`:
+Two workflows depending on whether you want to preview locally or on the live site.
+
+### Iterate on the deployed site
+Easiest if local Ruby is annoying. Drop the new post directly in `_posts/`
+with the current date in the filename (`YYYY-MM-DD-slug.md`), push, and
+refresh the live URL. Keep committing follow-ups until happy.
+
+### Local drafts
+Drafts live in `_drafts/`. They show up under `bundle exec jekyll serve --drafts`
+but are skipped in production builds — the deployed site never sees them.
+A starter is at `_drafts/_template.md`. To publish, rename to
+`YYYY-MM-DD-slug.md` and move into `_posts/`.
+
+### Frontmatter
 
 ```markdown
 ---
 layout: post
 title: My new post
-date: 2026-05-02
-description: Short description for the index card and SEO.
+description: One-sentence summary for the index card and social previews.
 ---
-
-Body in Markdown. Math via `$inline$` or `$$display$$` (KaTeX).
-Code in fenced blocks with language hints renders via Rouge.
 ```
+
+Body is Markdown. Math via `$inline$` or `$$display$$` (KaTeX, via build-time plugin).
+Fenced code blocks with language hints render via Rouge.
 
 ## Deployment
 
