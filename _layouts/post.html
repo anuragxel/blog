@@ -1,17 +1,20 @@
 ---
 layout: default
 ---
-
 <article class="post">
-  <h1>{{ page.title }}</h1>
+  <header class="post__header">
+    <h1 class="post__title">{{ page.title }}</h1>
+    <p class="post__meta">
+      <time datetime="{{ page.date | date_to_xmlschema }}">{{ page.date | date: "%B %-d, %Y" }}</time>
+    </p>
+  </header>
 
-  <div class="entry">
+  <div class="post__content">
     {{ content }}
   </div>
 
-  <div class="date">
-    Written on {{ page.date | date: "%B %e, %Y" }}
-  </div>
-
-  {% include disqus.html %}
+  <footer class="post__footer">
+    <a href="{{ '/' | relative_url }}">← All posts</a>
+    <a href="{{ site.home_url | default: '/' }}">{{ site.author }} →</a>
+  </footer>
 </article>

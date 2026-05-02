@@ -1,18 +1,28 @@
 ---
 layout: default
 ---
+<section class="home-intro">
+  <p>Notes, derivations, and longer-form writing.</p>
+</section>
 
-<div class="posts">
+{% if site.posts.size > 0 %}
+<ul class="post-list">
   {% for post in site.posts %}
-    <article class="post">
-
-      <h1><a href="{{ site.baseurl }}{{ post.url }}">{{ post.title }}</a></h1>
-
-      <div class="entry">
-        {{ post.excerpt }}
-      </div>
-
-      <a href="{{ site.baseurl }}{{ post.url }}" class="read-more">Read More</a>
-    </article>
+  <li>
+    <a class="post-card" href="{{ post.url | relative_url }}">
+      <p class="post-card__meta">
+        <time datetime="{{ post.date | date_to_xmlschema }}">{{ post.date | date: "%b %-d, %Y" }}</time>
+      </p>
+      <h2 class="post-card__title">{{ post.title }}</h2>
+      {% if post.description %}
+      <p class="post-card__excerpt">{{ post.description }}</p>
+      {% else %}
+      <p class="post-card__excerpt">{{ post.excerpt | strip_html | truncate: 180 }}</p>
+      {% endif %}
+    </a>
+  </li>
   {% endfor %}
-</div>
+</ul>
+{% else %}
+<p class="post-list__empty">No posts yet — coming soon.</p>
+{% endif %}

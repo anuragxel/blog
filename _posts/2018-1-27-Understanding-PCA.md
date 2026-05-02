@@ -34,7 +34,7 @@ $$ \hat{x} = P^{T} x^{\prime}$$
 
 $$ \hat{x} = P^{T} P x^{\prime}$$
 
-It’s now apparent that we wish to minimize the reconstruction loss that encurred because of projection and backprojection due to $P$, that is, 
+It’s now apparent that we wish to minimize the reconstruction loss incurred because of projection and backprojection due to $P$, that is, 
 
 $$ \mathbf{min} \quad || x − \hat{x} || $$
 

@@ -1,0 +1,9 @@
+<footer class="site-footer">
+  <div class="container site-footer__inner">
+    <p>&copy; {{ 'now' | date: "%Y" }} {{ site.author }}</p>
+    <div class="site-footer__links">
+      <a href="{{ site.home_url | default: '/' }}">{{ site.url | replace: 'https://', '' | replace: 'http://', '' }}</a>
+      <a href="https://github.com/{{ site.github_username }}">GitHub</a>
+    </div>
+  </div>
+</footer>

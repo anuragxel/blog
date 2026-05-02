@@ -1,0 +1,22 @@
+/* Rouge syntax highlighting — light theme tuned for the site palette */
+.highlight {
+  .c, .ch, .cd, .cm, .cpf, .c1, .cs { color: #6a737d; font-style: italic; } /* Comment */
+  .err { color: #b31b1b; }
+  .k, .kc, .kd, .kn, .kp, .kr, .kt, .kv { color: #d73a49; }                /* Keyword */
+  .o, .ow                                  { color: #d73a49; }                /* Operator */
+  .p, .pi                                   { color: #24292e; }                /* Punctuation */
+  .gd { color: #b31b1b; background: #ffeef0; }
+  .gi { color: #22863a; background: #f0fff4; }
+  .gh, .gu { color: #005cc5; font-weight: 600; }
+  .nb, .bp { color: #005cc5; }                                                /* Builtin */
+  .nc, .ne { color: #6f42c1; font-weight: 600; }                              /* Class / Exception */
+  .nf, .fm { color: #6f42c1; }                                                /* Function */
+  .nn      { color: #2C5FD1; }                                                /* Namespace */
+  .nt      { color: #22863a; }                                                /* Tag */
+  .nv, .vc, .vg, .vi { color: #e36209; }                                      /* Variable */
+  .no, .ni { color: #005cc5; }                                                /* Constant / Entity */
+  .s, .sa, .sb, .sc, .dl, .sd, .s2, .sh, .si, .sx, .sr, .s1, .ss { color: #032f62; } /* String */
+  .se { color: #d73a49; }
+  .m, .mb, .mf, .mh, .mi, .mo, .il { color: #005cc5; }                        /* Number */
+  .il { color: #005cc5; }
+}

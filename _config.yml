@@ -1,86 +1,49 @@
-#
-# This file contains configuration flags to customize your site
-#
+title: Anurag Ghosh
+tagline: Notes & writing
+description: >-
+  Notes, derivations, and longer-form writing by Anurag Ghosh —
+  Robotics PhD at Carnegie Mellon, working on computer vision,
+  imaging, and autonomous driving.
+author: Anurag Ghosh
+email: anuraggh@andrew.cmu.edu
 
-# Name of your site (displayed in the header)
-name: Anurag Ghosh
-
-# Short bio or description (displayed in the header)
-description: Wannabe Researcher
-
-# URL of your avatar or profile pic (you could use your GitHub profile pic)
-avatar: https://avatars2.githubusercontent.com/u/5917609
-
-#
-# Flags below are optional
-#
-
-# Includes an icon in the footer for each username you enter
-footer-links:
-  dribbble:
-  email: ghoshanurag1995@gmail.com
-  facebook: anurag.xel
-  flickr:
-  github: anuragxel
-  instagram: anuragxel
-  linkedin:
-  pinterest:
-  rss: # just type anything here for a working RSS icon
-  twitter: 
-  stackoverflow: # your stackoverflow profile, e.g. "users/50476/bart-kiers"
-  youtube: # channel/<your_long_string> or user/<user-name>
-  googleplus: # anything in your profile username that comes after plus.google.com/
-
-
-# Enter your Disqus shortname (not your username) to enable commenting on posts
-# You can find your shortname on the Settings page of your Disqus account
-disqus: anuragxel-github-io
-
-# Enter your Google Analytics web tracking code (e.g. UA-2110908-2) to activate tracking
-google_analytics:
-
-# Your website URL (e.g. http://barryclark.github.io or http://www.barryclark.co)
-# Used for Sitemap.xml and your RSS feed
-url: https://anuragxel.github.io
-
-# If you're hosting your site at a Project repository on GitHub pages
-# (http://yourusername.github.io/repository-name)
-# and NOT your User repository (http://yourusername.github.io)
-# then add in the baseurl here, like this: "/repository-name"
+url: "https://anuragxel.github.io"
 baseurl: "/blog"
 
-#
-# !! You don't need to change any of the configuration flags below !!
-#
+home_url: "https://anuragxel.github.io/"
+github_username: anuragxel
 
 permalink: /:title/
+timezone: America/New_York
 
-# The release of Jekyll Now that you're using
-version: v1.2.0
+markdown: kramdown
+highlighter: rouge
 
-# Jekyll 3 now only supports Kramdown for Markdown
 kramdown:
-  # Use GitHub flavored markdown, including triple backtick fenced code blocks
   input: GFM
-  # Jekyll 3 and GitHub Pages now only support rouge for syntax highlighting
   syntax_highlighter: rouge
   syntax_highlighter_opts:
-    # Use existing pygments syntax highlighting css
-    css_class: 'highlight'
+    css_class: highlight
+  # Math is wrapped at build time by _plugins/math.rb (base64 in data-tex).
+  # KaTeX renders client-side from _includes/head.html.
+  math_engine: mathjax
 
-# Set the Sass partials directory, as we're using @imports
 sass:
-  style: :expanded # You might prefer to minify using :compressed
+  style: compressed
+  sass_dir: _sass
 
-# Use the following plug-ins
-gems:
-  - jekyll-sitemap # Create a sitemap using the official Jekyll sitemap gem
-  - jekyll-feed # Create an Atom feed using the official Jekyll feed gem
+plugins:
+  - jekyll-feed
+  - jekyll-sitemap
+  - jekyll-seo-tag
 
-# Exclude these files from your production _site
+feed:
+  path: feed.xml
+
 exclude:
   - Gemfile
   - Gemfile.lock
-  - LICENSE
+  - vendor
   - README.md
-  - CNAME
+  - LICENSE
+  - .github

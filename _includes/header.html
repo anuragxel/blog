@@ -1,0 +1,13 @@
+<header class="site-header">
+  <div class="container site-header__inner">
+    <a class="site-header__brand" href="{{ '/' | relative_url }}">
+      <span class="site-header__name">{{ site.title }}</span>
+      <span class="site-header__tagline">{{ site.tagline }}</span>
+    </a>
+    <nav class="site-nav">
+      <a href="{{ '/' | relative_url }}">Posts</a>
+      <a href="{{ site.home_url | default: '/' }}">About</a>
+      <a href="{{ '/feed.xml' | relative_url }}">RSS</a>
+    </nav>
+  </div>
+</header>
