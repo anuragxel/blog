@@ -38,6 +38,12 @@ these over typing `bundle exec jekyll ...` directly.
   underscores survive untouched. KaTeX renders client-side from `_includes/head.html`.
 - **Code:** triple-fenced blocks with a language hint render via Rouge. Light theme
   in `_sass/_syntax.scss`.
+- **Citations:** `jekyll-scholar` with IEEE numeric style. Shared bib at
+  `_bibliography/references.bib`. Inline: `{% raw %}{% cite key1 key2 %}{% endraw %}`.
+  References at end of post: `## References` then `{% raw %}{% bibliography --cited %}{% endraw %}`.
+  Adding new refs = paste BibTeX into `references.bib`; abbreviated `booktitle={CVPR}`
+  is preserved as-is. `_plugins/citation_format.rb` cleans up the IEEE CSL's
+  missing space after `[N]`.
 - **Frontmatter:** `layout: post`, `title:`, optional `description:` (used in index
   card and `og:description`). Date comes from the filename (`YYYY-MM-DD-slug.md`).
 

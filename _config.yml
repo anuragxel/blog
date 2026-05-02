@@ -46,6 +46,16 @@ sass:
 plugins:
   - jekyll-sitemap
   - jekyll-seo-tag
+  - jekyll-scholar
+
+scholar:
+  style: ieee                # numeric [1], compact; abbreviated booktitles render as-is
+  locale: en
+  source: ./_bibliography
+  bibliography: references.bib
+  replace_strings: true
+  details_dir: bibliography
+  query: "@*"
 
 exclude:
   - Gemfile

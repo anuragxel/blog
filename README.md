@@ -39,6 +39,25 @@ description: One-sentence summary for the index card and social previews.
 Body is Markdown. Math via `$inline$` or `$$display$$` (KaTeX, via build-time plugin).
 Fenced code blocks with language hints render via Rouge.
 
+### Citations
+
+One shared bib at `_bibliography/references.bib`. Cite inline and emit a
+references list with [`jekyll-scholar`](https://github.com/inukshuk/jekyll-scholar):
+
+```markdown
+SfM has been studied for decades {% raw %}{% cite schonberger2016structure %}{% endraw %},
+and place-recognition methods like NetVLAD {% raw %}{% cite arandjelovic2016netvlad torii2011visual %}{% endraw %}.
+
+## References
+
+{% raw %}{% bibliography --cited %}{% endraw %}
+```
+
+`--cited` emits only the entries actually referenced in the post (not the
+whole bib). Style is IEEE numeric `[1]`. Drop new BibTeX entries straight
+into `references.bib` — the abbreviated `booktitle={CVPR}` format renders
+as-is, no expansion.
+
 ## Deployment
 
 Pushing to `gh-pages` triggers `.github/workflows/pages.yml`, which builds with Jekyll 4 and deploys via the official GitHub Pages Actions.
