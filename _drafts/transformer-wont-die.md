@@ -208,12 +208,68 @@ This is also why frozen features plus a linear probe generalizes so well across 
 
 The standard motivation for multi-head attention is "different heads attend to different things", as in syntactic heads, positional heads, coreference heads. That is descriptively accurate but does not explain why the architecture needs multiple heads rather than one larger head with the same total parameter count.
 
-Softmax is a soft argmax over the keys. With temperature controlled by $\sqrt{d_k}$, a single head concentrates its weight on whichever key is closest to the query in the learned metric $M = W_Q W_K^{T}$, leaving the rest of the simplex mass to the surrounding keys. The output of one head is therefore close to a single weighted nearest-neighbor lookup in one metric space, and it can express only *unimodal* relevance: one peak, falling off in all directions away from the argmax.
+Softmax is a soft argmax over the keys, with sharpness controlled by $\sqrt{d_k}$ and by how well-separated the keys are in the learned metric $M = W_Q W_K^{T}$, so in practice it often spreads mass across the top few keys rather than concentrating on a single one. The structural property either way is that a single head expresses only *unimodal* relevance: for a fixed query $x_i$, the score $x_j \mapsto x_i^{T} M x_j$ is linear in $x_j$ and has a single direction of maximum increase, so the softmax concentrates around one mode regardless of how sharp or diffuse it ends up being. The output of one head is close to a single weighted nearest-neighbor lookup in one metric space, with one peak and a single falloff.
 
-The moment a task requires picking out two unrelated things at once (attend to the subject *and* the object, look back $\delta_1$ tokens *and* $\delta_2$ tokens, match shape *and* texture), one metric is not enough. You cannot pick a single bilinear form $M$ so that two separated regions both come out high relative to everything else, because the soft-argmax of one metric concentrates on its one mode. Multi-head attention learns $h$ different metrics $M_h = W_{Q,h} W_{K,h}^{T}$ in parallel and concatenates the per-head outputs. Each head is its own soft-argmax in its own learned subspace, and the concatenation is the union of $h$ separate $k$-NN lookups, each in a metric tuned to a different relevance pattern.
+The moment a task requires picking out two unrelated things at once (attend to the subject *and* the object, look back $\delta_1$ tokens *and* $\delta_2$ tokens, match shape *and* texture), one metric is not enough. There is no bilinear form $M$, at any rank, that scores two separated regions of key-space both above everything else for the same query, because the per-query score is linear in $x_j$. Multi-head attention learns $h$ different metrics $M_h = W_{Q,h} W_{K,h}^{T}$ in parallel. Each query gets $h$ different linear score functions, one per head, so it can attend to $h$ different directions in key-space at once. The concatenation is the union of $h$ soft $k$-NN lookups, each in a metric tuned to a different relevance pattern.
 
 The number of heads is best read as the number of distinct modes of relevance the task needs to express within a single layer. Subspace metric learning in the classical sense {% cite weinberger2009distance %} did this by hand, picking a few different metrics for a few different aspects of the data. Multi-head attention does it end-to-end, with the $h$ metrics learned jointly with the rest of the model.
 
+## A Transformer is not just Stacking Soft Kernel KNNs: What about the trillion parameters?
+
+The "self-attention is soft $k$-NN" framing is correct but partial. A trained transformer has hundreds of billions of parameters, and the throughline owes the reader an account of where they sit. The right resolution is the distinction between *projections* and *projectors*, which is also what makes the architecture compositional.
+
+Recall the per-layer setup:
+
+$$Q = X W_Q, \quad K = X W_K, \quad V = X W_V$$
+
+$$\mathrm{SelfAttn}(X) = \mathrm{softmax}\!\left( \frac{Q K^{T}}{\sqrt{d_k}} \right) V$$
+
+The matrices $W_Q, W_K, W_V \in \mathbb{R}^{d \times d_k}$ are *projectors*: fixed parameters of the model, learned during training and frozen at inference. They contribute roughly $3 \cdot d \cdot d_k$ parameters per head per layer, and once you account for $h$ heads, $L$ layers, output projections $W_O$, and the MLP blocks between attention layers, this is where the parameter count concentrates.
+
+The matrices $Q, K, V$ are *projections*: data-dependent activations you get by applying the projectors to whatever input $X$ shows up. They are recomputed every forward pass and discarded after. The effective similarity between two tokens,
+
+$$\langle q_i, k_j \rangle = x_i^{T} (W_Q W_K^{T}) x_j = x_i^{T} M x_j,$$
+
+is a fixed bilinear form $M = W_Q W_K^{T}$ applied to fresh inputs. The metric $M$ is parametric and the same for every input the model ever sees. The reference set, queries, and values are non-parametric in the sense that they are constructed entirely from the current input.
+
+That separation is what makes attention compositional. The same learned metric gets applied to every input, including to the *previous* layer's output, which is itself the result of the same metric structure applied to *that* layer's input, and so on for $L$ layers. A stacked transformer is $L$ soft $k$-NN lookups, each with its own learned metric and head structure, each operating on the reference set produced by the layer below. The MLP blocks between attention layers add parametric nonlinearities that the $k$-NN view says nothing about, and most of the parameter budget actually goes there.
+
+So a trillion-parameter transformer decomposes into:
+
+1. **Per-head, per-layer projectors** $W_{Q,h}^{\ell}, W_{K,h}^{\ell}, W_{V,h}^{\ell}$, encoding $hL$ learned metrics and the corresponding value transforms.
+2. **Output projections** $W_O^{\ell}$ that mix per-head outputs back to model dimension at each layer.
+3. **MLP blocks** between attention layers, where most of the parameter budget concentrates. These supply the parametric nonlinearities that compose with the soft $k$-NN aggregation.
+4. **Embedding and unembedding matrices.**
+
+The $k$-NN view explains the per-layer aggregation operation. The model's stored knowledge sits in the projectors and (mostly) in the MLPs, which the $k$-NN view does not address. The "non-parametric" label from earlier in the post is about the per-layer aggregation rule, not the model as a whole.
+
+A handful of implications fall out cleanly from this picture.
+
+### RAG is attention with additional external references added at will.
+
+Retrieval-augmented generation extends the context window to include relevant documents from a corpus. Under the $k$-NN view, this is unremarkable, since you are handing the non-parametric estimator more reference points. The "RAG vs fine-tuning" debate is, statistically, "non-parametric estimation with a bigger reference set against parametric fitting on it", and the trade-offs are exactly what classical statistics predicts. Big reference sets favor non-parametric methods, and small well-targeted training sets favor parametric ones.
+
+### In-context learning, few-shot prompting, and chain-of-thought are all the same trick.
+
+They are all "supply more reference points to the $k$-NN estimator to shape the prediction". Few-shot prompting supplies labeled examples directly. Chain-of-thought supplies reasoning steps that constrain the predicted continuation. Tool use supplies external observations as reference points. These look like different techniques but they are the same thing at the mechanism level, namely different ways of populating the reference set with information that helps the estimator.
+
+### The KV cache is the cached reference set.
+
+At autoregressive inference, the $K$ and $V$ projections of past tokens never change once computed, because the projectors $W_K, W_V$ are fixed and the past tokens are fixed. They are cached once and reused for every subsequent generation step. Each new query position recomputes only its own $q, k, v$ and runs one fresh attention lookup against the cached reference set. The memory cost of the cache scales linearly with context length, because it is literally storing the reference set the per-layer $k$-NN runs over.
+
+### Generalized tool calling works because projectors learn the meta-skill.
+
+Tool calling is the cleanest payoff of the projector/projection distinction. Since $W_Q, W_K, W_V$ are data-invariant, what they encode at training time is the *kind* of similarity that matters, not any particular tuples of (query, key, value). When a model is trained on, say, tool use, the projectors learn the meta-skill of "match a user request to an interface description, then route to the matching argument slots". The specific tool name, parameter schema, and function ABI all live in the data-dependent projections at inference time.
+
+That separation is what lets a model call tools it has never seen at training time, as long as the new tool descriptions live in the context. The projectors recognize the structural pattern of the lookup (request, then interface, then argument selection). The tool-specific content is just another pattern of $q, k, v$ for the same projectors to operate on, no different from the training-time tools that taught them the skill.
+
+### Test-time compute scaling via layer reuse.
+
+Two earlier framings combine here. The projector/projection split says the per-layer projectors $W_Q, W_K, W_V$ are data-invariant, so the same attention operation can be applied to whatever activations it sees, including activations that came out of the same operation a moment earlier. The no-information-bottleneck property says the output of a self-attention layer sits in the same $\mathbb{R}^{N \times d}$ as the input, so feeding the layer's output back into itself is a type-correct thing to do. Together, the architecture supports running the same layer multiple times against an evolving reference set, deepening the computation at test time without any new parameters.
+
+This is the architectural premise behind Universal Transformer {% cite dehghani2019universal %} and PonderNet {% cite banino2021pondernet %}, which tie attention and MLP weights across depth and learn a halting policy that decides when to stop iterating and emit a prediction. Looped Transformers {% cite giannou2023looped %} push the same idea further by using a tied stack as a programmable computational substrate. The key enabler in all of these is the data-invariance of the projectors. You cannot loop a layer that maintains a stateful, sample-specific summary, because that state gets consumed on the first pass.
+
+There is one caveat worth flagging. The MLP block applied between attention layers is also data-invariant in its weights, but it implements a fixed nonlinear transformation on each token independently, with no reference-set lookup involved. The attention part loops cleanly because the operation it implements is a lookup against a reference set that itself evolves as the layer iterates. The MLP part loops less cleanly because it applies the same token-wise function to whatever sits in the residual stream, which does not refine in the same way. Iterated-depth setups in the literature typically need a per-iteration timestep embedding to disambiguate which loop step the tied layer is running {% cite dehghani2019universal %}. I conjecture that the MLP block also needs more capacity to compensate for being applied repeatedly, since it is doing more per-parameter work each iteration, though I do not know of a clean empirical result that confirms this. Either way, this is part of the architectural cost of sharing weights across depth.
 
 # References
 
