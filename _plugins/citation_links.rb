@@ -22,10 +22,12 @@ module BlogCitationLinks
     @url_map = {}
   end
 
-  # IEEE CSL appends ", Available at: <url>" or ". Available at: <url>" when
-  # an entry has a url field.  We're using the url to link the title instead,
+  # IEEE CSL appends ", Available: <url>" or ". [Online]. Available: <url>" when
+  # an entry has a url field.  (Note: ieee.csl on l.61 redefines the
+  # "available at" term to just "available", so the prefix is "Available:",
+  # not "Available at:".)  We're using the url to link the title instead,
   # so strip that trailing fragment.
-  AVAILABLE_AT_RE = /[,.]?\s*Available at:\s*\S+\s*\.?\s*\z/
+  AVAILABLE_AT_RE = /[,.]?\s*(?:\[[A-Za-z]+\]\.\s*)?Available(?:\s+at)?:\s*\S+\s*\.?\s*\z/
 
   def self.link_title(body, url)
     body = body.sub(AVAILABLE_AT_RE, "").rstrip
