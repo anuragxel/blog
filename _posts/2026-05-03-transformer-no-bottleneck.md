@@ -2,6 +2,7 @@
 layout: post
 title: "Why is killing transformers hard? Part 1: no information bottleneck"
 description: The capacity property that every alternative architecture has to match.
+date: 2026-05-03 12:00:00 -0500
 ---
 
 A friend of mine, very smart but not a machine learning person asked me recently, what's going on with the machine learning architecture world, is Mamba looking good compared to transformers?
@@ -10,7 +11,7 @@ I replied, "No, it has an information bottleneck embedded in its state-space ope
 
 He responded, "I suppose, but it's hard to tell what the real reasons are for why it works. You guys sometimes add 7 layers, sometimes 8 and god knows why one works and the other doesn't."
 
-I hated my own hand-waviness and decided to systematize what I know. This is the first of a four-part series on architectural properties that make transformers hard to displace. This post is about the simplest of them: the architecture preserves token dimensionality, so it never forces a low-dimensional summary that the rest of the model has to reconstruct.
+I hated my own hand-waviness and decided to systematize what I know. There are several architectural properties that, taken together, make transformers hard to displace, and this is the first in a four-part series unpacking them. The simplest, and the topic of this post, is that the architecture preserves token dimensionality at every layer, so it never forces a low-dimensional summary that the rest of the model has to reconstruct.
 
 ## Self-attention and cross-attention
 
@@ -60,7 +61,7 @@ The recurrence $h_t = f(h_{t-1}, x_t)$ is intrinsically ordered, so $h_t$ summar
 
 ## Hard to kill
 
-Any architecture that wants to compete with transformers on generality has to follow the notion of introducing ``no information bottlenecks''{% cite jelassi2024repeat %}. Also, the fact that the self-attention operator itself is non-parametric has deep implications in my view, which we shall cover in the next blog post.
+Any architecture that wants to compete with transformers on generality has to follow the notion of introducing "no information bottlenecks" {% cite jelassi2024repeat %}. Also, the fact that the self-attention operator itself is non-parametric and acts as a soft $k$-NN over some metric space has deep implications in my view, which we shall cover in the next blog post.
 
 # References
 
