@@ -2,7 +2,7 @@
 layout: post
 title: "Why is killing transformers hard? Part 2: self-attention as soft k-NN"
 description: Self-attention through metric learning and kernel methods.
-date: 2026-05-03 11:00:00 -0500
+date: 2026-05-03 12:00:00 -0500
 ---
 
 This is part 2 of a four-part series. Part 1 argued that the dim-preservation property of self-attention is one reason transformers are hard to displace. This post is about the other half of that picture: the self-attention operation is a non-parametric estimator mimicking a soft $k$-NN on a learned metric space.

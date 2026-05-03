@@ -2,7 +2,7 @@
 layout: post
 title: "Why is killing transformers hard? Part 1: no information bottleneck"
 description: The capacity property that every alternative architecture has to match.
-date: 2026-05-03 12:00:00 -0500
+date: 2026-05-03 11:00:00 -0500
 ---
 
 A friend of mine, very smart but not a machine learning person asked me recently, what's going on with the machine learning architecture world, is Mamba looking good compared to transformers?
