@@ -77,11 +77,13 @@ Once a task requires picking out two unrelated things at once (attend to the sub
 
 The number of heads is best read as the number of distinct modes of relevance the task needs to express within a single layer. Subspace metric learning in the classical sense {% cite weinberger2009distance %} did this by hand, picking a few different metrics for a few different aspects of the data. Multi-head attention does it end-to-end, with the $h$ metrics learned jointly with the rest of the model.
 
-## The unreasonable effectiveness of linear and k-NN probes after pretraining
+## The unreasonable effectiveness of linear and k-NN probes
 
-Pretraining is metric learning. Every forward pass through a stacked self-attention model is one big soft $k$-NN over a learned metric, so any training loss that updates $W_Q$ and $W_K$ is also optimizing the inner product that decides which tokens score high together. The objective does not have to be a contrastive metric-learning loss explicitly. Masked language modeling, masked image modeling, and contrastive image-text losses all train the same metric, just with different supervision signals.
+Pretraining can be seen as metric learning in this light. Every forward pass through a stacked self-attention model is one big soft $k$-NN over a learned metric, so any training loss that updates $W_Q$ and $W_K$ is also optimizing the inner product that decides which tokens score high together. The objective does not have to be a contrastive metric-learning loss explicitly. Masked language modeling, masked image modeling, and contrastive image-text losses all train the same metric, just with different supervision signals.
 
 Consider DINO {% cite caron2021emerging %} and DINOv2 {% cite oquab2024dinov2 %}, or any image/video foundation model. Why are their features so general? You do layer-wise soft $k$-NN over an astonishingly huge reference set, and the network learns the metric space in which that layer-wise soft $k$-NN works. Both report $k$-NN classification accuracy on frozen features as a flagship evaluation alongside linear probing, on the basis that a well-trained representation should already place same-class examples near each other in the learned space. CLIP {% cite radford2021learning %} works the same way at inference time, scoring an image embedding against a set of text embeddings with a single dot product, which is the cross-attention score with hard top-1 selection.
+
+That $k$-NN is a hard baseline to beat is not a deep-learning-era observation. Beyond the bounds {% cite cover1967nearest %}, universal consistency results {% cite stone1977consistent %}, the practical folklore has been repeated, including the explicit defense of naive nearest-neighbor classification on image features as competitive {% cite boiman2008defense %}. The same pattern keeps recurring in the deep era: $k$-NN on top of language model representations improves perplexity {% cite khandelwal2020generalization %}, retrieval-augmented generation lifts large LMs {% cite lewis2020retrieval %}.
 
 ## Harder to kill
 
