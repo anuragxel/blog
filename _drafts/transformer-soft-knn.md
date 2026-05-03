@@ -14,7 +14,7 @@ $$\mathrm{SelfAttn}(X) = \mathrm{softmax}\!\left( \frac{Q K^{T}}{\sqrt{d_k}} \ri
 
 with $Q = X W_Q$, $K = X W_K$, $V = X W_V$. Output sits in the same $\mathbb{R}^{N \times d_v}$ as the input.
 
-## Soft k-NN over a learned metric
+## Soft k-NN over a learned metric space
 
 The projection weights $Q, K, V$ are themselves functions of the input, which has very deep connections to metric learning and classical learning literature. I like to think of self-attention as doing soft-KNN over a learned kernel/metric space.
 
@@ -22,11 +22,11 @@ To see why, look at the score we feed into softmax. For two tokens $x_i, x_j \in
 
 $$\frac{q_i^{T} k_j}{\sqrt{d_k}} = \frac{x_i^{T} W_Q W_K^{T} x_j}{\sqrt{d_k}} = \frac{x_i^{T} M\, x_j}{\sqrt{d_k}}$$
 
-where $M = W_Q W_K^{T} \in \mathbb{R}^{d \times d}$ is one learned matrix. The entire $QK^{T}$ machinery collapses to a single bilinear form on the input space. The factorization $M = W_Q W_K^{T}$ buys exactly one thing over learning $M$ directly: with $d_k < d$, it constrains $M$ to rank at most $d_k$.
+where $M = W_Q W_K^{T} \in \mathbb{R}^{d \times d}$ is one learned matrix. The entire $QK^{T}$ is a single bilinear form on the input space. The factorization $M = W_Q W_K^{T}$ buys exactly one thing over learning $M$ directly: with $d_k < d$, it constrains $M$ to rank at most $d_k$.
 
-This is the setup of classical *metric learning* {% cite weinberger2009distance %}. A bilinear form $\langle x_i, x_j \rangle_M = x_i^{T} M x_j$ defines a similarity (an inner product, when $M$ is symmetric positive-semidefinite). Mahalanobis metric learning and its many variants all amount to picking such an $M$ so that semantically similar points score high. Inner product in the raw input space is meaningless. Inner product in the $M$-warped space is whatever similarity the training objective shaped it to be.
+This is the setup of classical *metric learning* {% cite weinberger2009distance %}. A bilinear form $\langle x_i, x_j \rangle_M = x_i^{T} M x_j$ defines a similarity (an inner product, when $M$ is symmetric positive-semidefinite). Metric learning and its many variants all amount to picking such an $M$ so that semantically similar points score high. Inner product in the raw input space is generally not meaningful but if you have a way to project your inputs to some metric space (which your self-attention operation did), you are golden. 
 
-Once we have a learned similarity, exponentiating and row-normalizing gives us,
+Thus, if we have a learned similarity, exponentiating and row-normalizing gives us,
 
 $$\mathrm{softmax}\!\left( \frac{x_i^{T} M x_j}{\sqrt{d_k}} \right)_j$$
 
