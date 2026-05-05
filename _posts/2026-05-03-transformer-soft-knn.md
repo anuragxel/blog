@@ -13,7 +13,7 @@ Self-attention on a token set $X \in \mathbb{R}^{N \times d}$ computes
 
 $$\mathrm{SelfAttn}(X) = \mathrm{softmax}\!\left( \frac{Q K^{T}}{\sqrt{d_k}} \right) V$$
 
-with $Q = X W_Q$, $K = X W_K$, $V = X W_V$. Output sits in the same $\mathbb{R}^{N \times d_v}$ as the input.
+with $Q = X W_Q$, $K = X W_K$, $V = X W_V$. Output sits in $\mathbb{R}^{N \times d_v}$, with the same $N$ rows as the input.
 
 ## Soft k-NN over a learned metric space
 
@@ -25,7 +25,9 @@ $$\frac{q_i^{T} k_j}{\sqrt{d_k}} = \frac{x_i^{T} W_Q W_K^{T} x_j}{\sqrt{d_k}} = 
 
 where $M = W_Q W_K^{T} \in \mathbb{R}^{d \times d}$ is one learned matrix. The entire $QK^{T}$ is a single bilinear form on the input space. The factorization $M = W_Q W_K^{T}$ buys exactly one thing over learning $M$ directly: with $d_k < d$, it constrains $M$ to rank at most $d_k$.
 
-This is the setup of classical *metric learning* {% cite weinberger2009distance %}. A bilinear form $\langle x_i, x_j \rangle_M = x_i^{T} M x_j$ defines a similarity (an inner product, when $M$ is symmetric positive-semidefinite). Metric learning and its many variants all amount to picking such an $M$ so that semantically similar points score high. Inner product in the raw input space is generally not meaningful but if you have a way to project your inputs to some metric space (which your self-attention operation does), the inner product becomes a useful similarity. 
+This is the setup of classical *metric learning* {% cite weinberger2009distance %}. A bilinear form $\langle x_i, x_j \rangle_M = x_i^{T} M x_j$ defines a similarity (an inner product, when $M$ is symmetric positive-semidefinite). Metric learning and its many variants all amount to picking such an $M$ so that semantically similar points score high. Inner product in the raw input space is generally not meaningful but if you have a way to project your inputs to some metric space (which your self-attention operation does), the inner product becomes a useful similarity.
+
+Self-attention is a generalization of this setup. In classical metric learning, a bilinear form $\langle x_i, x_j \rangle_M = x_i^{T} M x_j$ with $M$ symmetric PSD defines a Mahalanobis inner product. Attention relaxes both constraints ($M = W_Q W_K^{T}$ is in general neither symmetric nor PSD), keeping only the low-rank structure. The asymmetry is a feature, not a bug: it lets the score for $i$ attending to $j$ differ from $j$ attending to $i$, which matters once tokens play directional roles.
 
 Thus, if we have a learned similarity, exponentiating and row-normalizing gives us,
 
@@ -35,7 +37,7 @@ which is a Nadaraya-Watson estimator {% cite nadaraya1964estimating watson1964sm
 
 - Queries $q_i$ are test points.
 - Keys $k_j$ are reference points.
-- Values $v_j = W_V x_j$ are reference labels.
+- Values $v_j = W_V^{T} x_j$ are reference labels.
 - $\mathrm{softmax}(q_i^{T} k_j / \sqrt{d_k})$ is a soft membership function. Instead of hard top-$k$ selection, you get a probability distribution over neighbors weighted by learned similarity.
 - The output $\sum_j \alpha_{ij} v_j$ is the soft $k$-NN prediction, a weighted average of neighbor labels.
 
