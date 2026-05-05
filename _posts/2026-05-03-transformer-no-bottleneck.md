@@ -41,9 +41,9 @@ The biggest question is: why is almost any concept or modality so easy to conver
 
 Consider a standard ViT-B/16 {% cite dosovitskiy2021image %}. Each $16 \times 16$ RGB patch is $16 \times 16 \times 3 = 768$ floats. We linearly project each one to a $d = 768$-dimensional token, giving a set of $N$ tokens to feed into a stack of self-attention operations {% cite vaswani2017attention %}. Given $N$ input tokens, each self-attention layer outputs $N$ tokens of the same dimension.
 
-Here is the key observation. At no point does the architecture reduce the dimensionality of any token. The output of self-attention sits in $\mathbb{R}^{N \times d}$, exactly like the input. There is no architectural bottleneck through which all $N$ tokens must be projected to lower dimensional space or to few number of vectors (i.e. tokens). With the right weights, $\mathrm{SelfAttn}(X)$ can losslessly carry every coordinate of $X$ forward.
+Here is the key observation. At no point does the architecture reduce the dimensionality of any token. The output of the multi-head self-attention block sits in $\mathbb{R}^{N \times d}$, exactly like the input (each head projects values to $d_v = d/h$, but the $h$ heads are concatenated and re-projected by $W_O$ back to $d$, so the block is dim-preserving even though individual heads are not). There is no architectural bottleneck through which all $N$ tokens must be projected to lower dimensional space or to few number of vectors (i.e. tokens). With the right weights, $\mathrm{SelfAttn}(X)$ can losslessly carry every coordinate of $X$ forward.
 
-Contrast this with a state-space model like Mamba {% cite gu2024mamba %}, whose forward pass is a recurrence
+Contrast this with a state-space model like Mamba {% cite gu2024mamba %}, whose forward pass is a recurrence (shown here for the linear/time-invariant case)
 
 $$h_t = A h_{t-1} + B x_t, \quad y_t = C h_t$$
 
@@ -61,7 +61,7 @@ The recurrence $h_t = f(h_{t-1}, x_t)$ is intrinsically ordered, so $h_t$ summar
 
 ## Hard to kill
 
-Any architecture that wants to compete with transformers on generality has to follow the notion of introducing "no information bottlenecks" {% cite jelassi2024repeat %}. Also, the fact that the self-attention operator itself is non-parametric and acts as a soft $k$-NN over some metric space has deep implications in my view, which we shall cover in the next blog post.
+Any architecture that wants to compete with transformers on generality has to follow the notion of introducing "no information bottlenecks" {% cite jelassi2024repeat %}. Also, the fact that the self-attention operator is non-parametric in its per-layer aggregation and acts as a soft $k$-NN over some metric space has deep implications in my view, which we shall cover in the next blog post.
 
 # References
 
