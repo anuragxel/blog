@@ -5,7 +5,7 @@ description: Self-attention through metric learning and kernel methods.
 date: 2026-05-03 12:00:00 -0500
 ---
 
-This is part 2 of a four-part series. Part 1 argued that the dim-preservation property of self-attention is one reason transformers are hard to displace. This post is about the other half of that picture: the self-attention operation is a non-parametric estimator mimicking a soft $k$-NN on a learned metric space.
+This is part 2 of a four-part series. Part 1 argued that the dim-preservation property of self-attention is one reason transformers are hard to displace. This post is about the other half of that picture: the self-attention operation parameterizes a soft $k$-NN-style estimator over a learned metric space.
 
 ## Recap
 
@@ -25,9 +25,7 @@ $$\frac{q_i^{T} k_j}{\sqrt{d_k}} = \frac{x_i^{T} W_Q W_K^{T} x_j}{\sqrt{d_k}} = 
 
 where $M = W_Q W_K^{T} \in \mathbb{R}^{d \times d}$ is one learned matrix. The entire $QK^{T}$ is a single bilinear form on the input space. The factorization $M = W_Q W_K^{T}$ buys exactly one thing over learning $M$ directly: with $d_k < d$, it constrains $M$ to rank at most $d_k$.
 
-This is the setup of classical *metric learning* {% cite weinberger2009distance %}. A bilinear form $\langle x_i, x_j \rangle_M = x_i^{T} M x_j$ defines a similarity (an inner product, when $M$ is symmetric positive-semidefinite). Metric learning and its many variants all amount to picking such an $M$ so that semantically similar points score high. Inner product in the raw input space is generally not meaningful but if you have a way to project your inputs to some metric space (which your self-attention operation does), the inner product becomes a useful similarity.
-
-Self-attention is a generalization of this setup. In classical metric learning, a bilinear form $\langle x_i, x_j \rangle_M = x_i^{T} M x_j$ with $M$ symmetric PSD defines a Mahalanobis inner product. Attention relaxes both constraints ($M = W_Q W_K^{T}$ is in general neither symmetric nor PSD), keeping only the low-rank structure. The asymmetry is a feature, not a bug: it lets the score for $i$ attending to $j$ differ from $j$ attending to $i$, which matters once tokens play directional roles.
+Self-attention is a generalization of this setup. In classical metric learning, a bilinear form $\langle x_i, x_j \rangle_M = x_i^{T} M x_j$ with $M$ symmetric PSD defines a Mahalanobis inner product. Attention relaxes both constraints ($M = W_Q W_K^{T}$ is in general neither symmetric nor PSD), keeping only the low-rank structure. The asymmetry is a feature as it lets the score for $i$ attending to $j$ differ from $j$ attending to $i$, which matters once tokens play directional roles.
 
 Thus, if we have a learned similarity, exponentiating and row-normalizing gives us,
 
@@ -65,17 +63,17 @@ The factor-of-two slack disappears once we let $k$ grow. Stone's theorem {% cite
 
 The catch is that both bounds are stated in the data-generating distribution's natural metric. With Euclidean distance on raw pixels, the "nearest neighbor" of a cat picture is often a different cat-shaped patch of color and not another cat. Classical $k$-NN binds against a meaningless notion of nearness, and degrades catastrophically in high dimensions, where pairwise distances concentrate and the very notion of a "nearest" point loses its meaning {% cite beyer1999nearest %}. The guarantees are real but contingent on having a metric worth using, and classical $k$-NN does not provide one.
 
-This is the gap self-attention closes. Training $M = W_Q W_K^{T}$ end-to-end picks the inner product under which "nearest by $M$" correlates with "same downstream label". The classical statements do not transfer formally to attention (the reference set is in-context rather than iid, the metric is learned jointly with the labels, the aggregation is soft rather than top-$k$), but my conjecture is that self-attention approximates non-parametric $k$-NN, whose worst case is bounded and whose limit case is Bayes-optimal.
+This is the gap self-attention closes. Training $M = W_Q W_K^{T}$ end-to-end picks the inner product under which "nearest by $M$" correlates with "same downstream label". The classical statements do not transfer formally to attention (the reference set is in-context rather than iid, the metric is learned jointly with the labels, the aggregation is soft rather than top-$k$, and the kernel $\exp(x_i^{T} M x_j / \sqrt{d_k})$ is asymmetric and not Mercer because $M$ is not symmetric), but my conjecture is that self-attention inherits the qualitative behavior of non-parametric $k$-NN: bounded worst case and Bayes-optimal in the limit.
 
-The soft version also sidesteps the one remaining choice of classical $k$-NN, namely $k$ itself. Every query attends to all $N$ tokens, so $k = N$, and the softmax coefficients implicitly handle the effective neighborhood size. Tokens with low similarity get exponentially small weight and contribute almost nothing, while a few high-similarity tokens dominate the average.
+The soft version also sidesteps the one remaining choice of classical $k$-NN, namely $k$ itself. Every query attends to all $N$ tokens, and the softmax coefficients implicitly handle the effective neighborhood size through their entropy. Tokens with low similarity get exponentially small weight and contribute almost nothing, while a few high-similarity tokens dominate the average.
 
 ## Multi-head attention as multiple parallel metrics
 
 The standard motivation for multi-head attention is "different heads attend to different things", as in syntactic heads, positional heads, coreference heads. That is descriptively accurate but does not explain why the architecture needs multiple heads rather than one larger head with the same total parameter count.
 
-Softmax is a soft argmax over the keys, with sharpness controlled by $\sqrt{d_k}$ and by how well-separated the keys are in the learned metric $M = W_Q W_K^{T}$. For a fixed query $x_i$, the per-query score $x_j \mapsto x_i^{T} M x_j$ is linear in $x_j$, so it has one direction of maximum increase in key-space. A single head's softmax tends to concentrate mass along that direction, which makes one head a reasonable way to express one mode of relevance.
+Softmax is a soft argmax over the keys, with sharpness controlled by $1/\sqrt{d_k}$ and by how well-separated the keys are in the learned metric $M = W_Q W_K^{T}$. For a fixed query $x_i$, the per-query score $x_j \mapsto x_i^{T} M x_j$ is linear in $x_j$, so it has one direction of maximum increase in key-space. A single head's softmax tends to concentrate mass along that direction, which makes one head a reasonable way to express one mode of relevance.
 
-Once a task requires picking out two unrelated things at once (attend to the subject *and* the object, look back $\delta_1$ tokens *and* $\delta_2$ tokens, match shape *and* texture), a single linear score function has to pick a direction that compromises between them, and the softmax assigns mass accordingly. Multi-head attention learns $h$ different metrics $M_h = W_{Q,h} W_{K,h}^{T}$ in parallel, so each query gets $h$ different linear score functions and can put mass in $h$ different directions of key-space at once. The concatenation is the union of $h$ soft $k$-NN lookups, each in its own metric.
+Once a task requires picking out two unrelated things at once (attend to the subject *and* the object, look back $\delta_1$ tokens *and* $\delta_2$ tokens, match shape *and* texture), a single linear score function has to pick a direction that compromises between them, and the softmax assigns mass accordingly. Multi-head attention learns $h$ different metrics $M_i = W_{Q,i} W_{K,i}^{T}$ for $i = 1, \ldots, h$ in parallel, so each query gets $h$ different linear score functions and can put mass in $h$ different directions of key-space at once. The concatenation is the union of $h$ soft $k$-NN lookups, each in its own metric.
 
 The number of heads is best read as the number of distinct modes of relevance the task needs to express within a single layer. Subspace metric learning in the classical sense {% cite weinberger2009distance %} did this by hand, picking a few different metrics for a few different aspects of the data. Multi-head attention does it end-to-end, with the $h$ metrics learned jointly with the rest of the model.
 
