@@ -24,15 +24,13 @@ There are two ways of defining the optimization problem of PCA, we’ll look at 
 
 ### Reconstruction Loss Minimization
 
-Consider the inverse transformation $P^{−1}$. Given that we know that $P$ is essentially a set of directions over which we project our vectors, we can take that $P$ is a orthogonal matrix. Thus, we can say that $P^{−1}=P^{T}$.
+Consider how to reconstruct $x$ from its projection. Since $P$ is rectangular ($k \times d$ with $k < d$), it has no true inverse. We require $P$ to have orthonormal rows, so $P P^{T} = I_{k}$, and $P^{T}$ acts as the right pseudoinverse that maps a low-dimensional code back into $\mathbb{R}^{d}$.
 
 For some vector $x$, the projection is $x^{\prime} = Px$. Thus, the reconstructed $x$, let’s call it $\hat{x}$, would be
 
-$$ \hat{x} = P^{-1} x^{\prime}$$
-
 $$ \hat{x} = P^{T} x^{\prime}$$
 
-$$ \hat{x} = P^{T} P x^{\prime}$$
+$$ \hat{x} = P^{T} P x$$
 
 It’s now apparent that we wish to minimize the reconstruction loss incurred because of projection and backprojection due to $P$, that is, 
 
@@ -50,7 +48,7 @@ Convince yourself that this is equivalent to the reconstruction loss mentioned a
 
 The other way of looking at PCA is to find the best set of directions such that variability of the data is maximized in the lower dimensional space (This is what we usually see).
 
-Why is this a good idea? Because, **maximum discriminability is obtained in the direction with the maximum amount of variance.** (Convince yourself by imagining a distribution of students with a variable (say their grade) that never changes)
+Why is this a good idea? Because **the direction with the maximum variance preserves the most information about the data after projection**, in the sense that low-variance directions are nearly constant and contribute little to reconstruction. (Convince yourself by imagining a distribution of students with a variable (say their grade) that never changes; that direction carries no information and dropping it loses nothing.) Note that this is a reconstruction argument, not a class-discriminability one. PCA is unsupervised and does not in general align with class boundaries; that is what LDA is for.
 
 Say $X^{\prime} = Xp$ where $p$ is that direction of maximum variance. Thus, we can write the optimization as,
 
@@ -106,7 +104,7 @@ $$ \mathbf{max} \quad p^{T}Sp \quad s.t. \quad p^{T}p = 1 $$
 
 Now, using Lagrangian multipliers to convert this constrainted optimization to an unconstrainted optimization problem.
 
-$$ \mathbf{max} \quad p^{T}Sp - \lambda(p^{T}p - 1) \quad s.t. \quad \lambda \gt 0 $$
+$$ \mathbf{max} \quad p^{T}Sp - \lambda(p^{T}p - 1) $$
 
 We can consider the objective as $L(p,\lambda) = p^{T}Sp - \lambda(p^{T}p - 1)$ and we wish to maximize $L$.
 
@@ -142,8 +140,7 @@ Thus the algorithm can implemented simply as,
 
 ```
 def pca(X, k):
-    cov = np.cov(X)
-    w, v = np.linalg.eig(cov)
-    w, v = sort_vecs(w, v, reverse=True)
-    return v[:k]
+    cov = np.cov(X, rowvar=False)
+    w, v = np.linalg.eigh(cov)
+    return v[:, ::-1][:, :k]
 ```
