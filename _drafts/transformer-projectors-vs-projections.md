@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Why is killing transformers hard? Part 4: projectors vs projections"
+title: "Why won't the transformer die? Part 4: projectors vs projections"
 description: Where the trillion parameters live and what's their role.
 ---
 
@@ -57,7 +57,7 @@ This is the architectural premise behind Universal Transformer {% cite dehghani2
 
 There is one caveat worth flagging. The MLP block applied between attention layers is also data-invariant in its weights, but it implements a fixed nonlinear transformation on each token independently, with no reference-set lookup involved. The attention part loops cleanly because the operation it implements is a lookup against a reference set that itself evolves as the layer iterates. The MLP part loops less cleanly because it applies the same token-wise function to whatever sits in the residual stream, which does not refine in the same way. Iterated-depth setups in the literature typically need a per-iteration timestep embedding to disambiguate which loop step the tied layer is running {% cite dehghani2019universal %}. I conjecture that the MLP block also needs more capacity to compensate for being applied repeatedly, since it is doing more per-parameter work each iteration, though I do not know of a clean empirical result that confirms this. Either way, this is part of the architectural cost of sharing weights across depth.
 
-## Hardest to kill
+## Refuses to die
 
 The per-layer operation does not care where the reference set comes from, as long as the projectors and the projections are consistently typed. An alternative architecture that wants to support all four of these affordances has to give up either the data-invariance of the projectors or the fixed-typed lookup against a reference set.
 

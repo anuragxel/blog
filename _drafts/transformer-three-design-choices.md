@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Why is killing transformers hard? Part 3: three design choices"
+title: "Why won't the transformer die? Part 3: three design choices"
 description: Why three projectors, why inner product, why softmax.
 ---
 
@@ -67,7 +67,7 @@ What does the simplex commit you to? Three things that get conflated:
 
 The third property is a choice and one could have chosen a different inductive bias.
 
-## Much harder to kill
+## Just won't die
 
 An alternative architecture that wants to keep the dim-preservation of part 1 and the soft-k-NN behavior of part 2 has to make these three choices in some form. Tied-QK gives up directional asymmetry. Non-inner-product scores give up the kernel-methods backbone and the random-features approximations that ride on it. Non-softmax aggregation changes whether the per-head output is a convex combination of the values. Each choice has sensible alternatives. The combination is what makes the architecture stable across modalities and tasks.
 

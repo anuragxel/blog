@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Why is killing transformers hard? Part 2: self-attention as soft k-NN"
+title: "Why won't the transformer die? Part 2: self-attention as soft k-NN"
 description: Self-attention through metric learning and kernel methods.
 date: 2026-05-03 12:00:00 -0500
 ---
@@ -87,7 +87,7 @@ Consider DINO {% cite caron2021emerging %} and DINOv2 {% cite oquab2024dinov2 %}
 
 That $k$-NN is a hard baseline to beat is not a deep-learning-era observation. Beyond the bounds {% cite cover1967nearest %}, universal consistency results {% cite stone1977consistent %}, the practical folklore has been repeated, including the explicit defense of naive nearest-neighbor classification on image features as competitive {% cite boiman2008defense %}. The same pattern keeps recurring in the deep era: $k$-NN on top of language model representations improves perplexity {% cite khandelwal2020generalization %}, retrieval-augmented generation lifts large LMs {% cite lewis2020retrieval %}.
 
-## Harder to kill
+## Still won't die
 
 For a competing architecture to work across modalities the way transformers do, it has to support learned similarity, learned labels, and a context-shaped reference set. Architectures that fix any of the three (RNNs and SSMs that compress the reference set into a fixed-size hidden state, MLPs without context-dependent retrieval) have to pay for it in modality-specific tuning or task-specific architecture. The next post zooms in on the three specific design choices inside this lookup, asking why three projectors, why the inner product, and why softmax.
 

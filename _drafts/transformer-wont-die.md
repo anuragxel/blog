@@ -1,6 +1,6 @@
 ---
 layout: post
-title: Why is killing Transformers Hard?
+title: Why won't the Transformer die?
 description: Exploring One General Inductive Bias of Self-Attention.
 ---
 

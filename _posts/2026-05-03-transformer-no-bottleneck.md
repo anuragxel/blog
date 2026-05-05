@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Why is killing transformers hard? Part 1: no information bottleneck"
+title: "Why won't the transformer die? Part 1: no information bottleneck"
 description: The capacity property that every alternative architecture has to match.
 date: 2026-05-03 11:00:00 -0500
 ---
@@ -59,7 +59,7 @@ The classical tradeoff shows up here. Parametric models have constant per-step c
 
 The recurrence $h_t = f(h_{t-1}, x_t)$ is intrinsically ordered, so $h_t$ summarizes one particular causal traversal of the input. Self-attention is permutation-equivariant by default and acquires order through positional encodings. For modalities where order is not part of the data, like a set of images for novel view synthesis, a 3D point cloud, or the nodes of a graph, the recurrent route adds an unnecessary ordering inductive bias.
 
-## Hard to kill
+## Won't die
 
 Any architecture that wants to compete with transformers on generality has to follow the notion of introducing "no information bottlenecks" {% cite jelassi2024repeat %}. Also, the fact that the self-attention operator is non-parametric in its per-layer aggregation and acts as a soft $k$-NN over some metric space has deep implications in my view, which we shall cover in the next blog post.
 
