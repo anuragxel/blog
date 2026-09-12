@@ -31,7 +31,7 @@ Differentiable content-addressable memory has been a recurring research goal for
 
 ### Why not two projectors
 
-Two projections (tying $Q = K$) collapses address space into content space. You can only retrieve things by their similarity to themselves, which loses the ability to query for concepts on a different manifold. There is no asymmetry with two projections, because with shared $W_Q = W_K$ the pre-softmax score matrix $X W W^{T} X^{T}$ is symmetric, so token A scores B exactly as B scores A. Any asymmetry left in the attention weights comes only from each row's normalization, not from content, and there are situations where one can envision requiring this distinction. Causal language modeling, dependency-style relations, and any computation with directionality depend on this asymmetry. Tied-QK variants exist and work in some settings, but they give up this asymmetry, so three independent projections is the natural choice for an asymmetric, differentiable, content-addressable lookup.
+Tying $Q = K$ forces queries and keys to share a representation, limiting the ability to distinguish what a token searches for from how it is addressed. There is no asymmetry with two projections, because with shared $W_Q = W_K$ the pre-softmax score matrix $X W W^{T} X^{T}$ is symmetric, so token A scores B exactly as B scores A. Without masking or other positional mechanisms, any remaining asymmetry comes from each row's normalization. This learned asymmetry can be useful for causal language modeling, dependency-style relations, and other directional computations. Tied-QK variants exist and work in some settings, but they give up this asymmetry, so three independent projections is the natural choice for an asymmetric, differentiable, content-addressable lookup.
 
 ## Why inner product?
 
@@ -39,7 +39,7 @@ We have settled on three projections, but why is the score itself an inner produ
 
 ### Universal similarity measure
 
-Recall that attention's effective similarity is $\exp(x_i^{T} M x_j / \sqrt{d_k})$ with $M = W_Q W_K^{T}$ {% cite tsai2019transformer %}. The natural worry is that "exp of an inner product" might be a restrictive family. Mercer's theorem and the broader kernel-methods literature {% cite scholkopf2002learning %} say it is not. Every positive-definite kernel decomposes as $K(x, y) = \langle \phi(x), \phi(y) \rangle$ in some (possibly infinite-dimensional) feature space. Writing the similarity as an inner product of *learned* features $q = W_Q^{T} x$ and $k = W_K^{T} x$ is just: instead of fixing the kernel and discovering its features implicitly, we set up the inner product and learn the appropriate kernel.
+Recall that attention's effective similarity is $\exp(x_i^{T} M x_j / \sqrt{d_k})$ with $M = W_Q W_K^{T}$ {% cite tsai2019transformer %}. The natural worry is that "exp of an inner product" might be a restrictive family. Kernel methods {% cite scholkopf2002learning %} suggest why inner products can be expressive when applied to suitable learned features. Every positive-definite kernel decomposes as $K(x, y) = \langle \phi(x), \phi(y) \rangle$ in some (possibly infinite-dimensional) feature space. Writing the similarity as an inner product of *learned* features $q = W_Q^{T} x$ and $k = W_K^{T} x$ is just: instead of fixing the kernel and discovering its features implicitly, we set up the inner product and learn the appropriate kernel. This motivates the connection, although linear Q/K maps alone do not represent every kernel.
 
 With $d_k$ large enough, $W_Q W_K^{T}$ can express any rank-$d_k$ bilinear similarity on the input space. Some kernels (like RBF on the raw inputs) correspond to infinite-dimensional feature spaces, so no finite-rank bilinear score reproduces them exactly, but the relevant question is whether the rank-$d_k$ family is rich enough at the scales we work at, and in practice it is. The inner-product score also lines up directly with the metric-learning view from the earlier post, since picking the kernel and picking the metric are the same problem expressed in two different ways.
 
@@ -55,7 +55,7 @@ Moreover, the exponential is the unique continuous solution (up to a choice of b
 
 ### Probability simplex
 
-Mapping $\mathbb{R}^N$ to the $(N-1)$-dimensional probability simplex by requiring $\alpha_i \geq 0$ and $\sum_i \alpha_i = 1$ is a choice. We can exponentiate without normalizing (e.g. energy attention {% cite hoover2023energy %}), normalize without exponentiation (e.g. linear attention {% cite katharopoulos2020transformers %}), or have completely different constraints (sigmoid attention {% cite ramapuram2024sigmoid %}, where each weight is independent in $[0, 1]$).
+Mapping $\mathbb{R}^N$ to the $(N-1)$-dimensional probability simplex by requiring $\alpha_i \geq 0$ and $\sum_i \alpha_i = 1$ is a choice. We can exponentiate without normalizing, normalize without exponentiation (e.g. linear attention {% cite katharopoulos2020transformers %}), or have completely different constraints (sigmoid attention {% cite ramapuram2024sigmoid %}, where each weight is independent in $[0, 1]$).
 
 What does the probability simplex commit us to? Three things that get conflated:
 
