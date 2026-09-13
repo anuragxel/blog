@@ -1,12 +1,12 @@
 ---
 layout: post
 title: "Why won't the transformer die? Part 3: three design choices"
-description: Why three projectors, why inner product, why softmax.
+description: Why three projection weight matrices, why inner product, why softmax.
 ---
 
-This is part 3 of a four-part series. Parts 1 and 2 set up the picture of self-attention as a non-parametric, dim-preserving, K-NN-mimicking lookup table. This post takes apart the three specific design choices inside that lookup table and asks why each is the way it is.
+This is part 3 of a four-part series. Parts 1 and 2 set up the picture of self-attention as a non-parametric, dim-preserving, K-NN-mimicking lookup table. Calling Q, K, and V "queries, keys, and values" gives me names for the matrices. I also want to know what freedom I lose if I tie two of their weight matrices together, for example. This post takes apart each specific choice, in terms of the number of projection weight matrices, the inner product, and softmax.
 
-## Why three projectors? QKV as content-addressable lookup
+## Why three projection weight matrices? QKV as content-addressable lookup
 
 Why three projections? Why not two (tied $Q = K$) or four? In my view, each of the three projections has a distinct role.
 
@@ -14,7 +14,7 @@ Why three projections? Why not two (tied $Q = K$) or four? In my view, each of t
 
 One framing is that we need read, write, and address modes to implement a content-addressable memory, and three projections give such an API. To make it concrete, picture an ordinary associative array, where you write `memory[key] = value` and read it back by handing the same key in. A classical lookup needs an exact key match. A *content-addressable* lookup relaxes that to "return the value whose key is most similar to the query" under some chosen similarity. Soft attention is the differentiable version of the same retrieval, returning a weighted average of values where the weight on the $i$-th entry is $\exp(\langle q, k_i \rangle / \sqrt{d_k})$ after row-normalization across the keys {% cite vaswani2017attention %}.
 
-In *self*-attention, input tokens play all three roles via learned projectors. For a query $q$, a head computes approximately
+In *self*-attention, input tokens play all three roles via learned projection weights. For a query $q$, a head computes approximately
 
 $$\mathrm{attn}(q) \approx \texttt{memory}[k_{j^*}], \qquad j^* = \arg\max_j \, \langle q, k_j \rangle$$
 
@@ -29,7 +29,7 @@ Differentiable content-addressable memory has been a recurring research goal for
 - **End-to-End Memory Networks** {% cite sukhbaatar2015end %} and **Key-Value Memory Networks** {% cite miller2016key %} cleaned this up by separating out the key vector used for addressing from the value vector that gets returned. By the time the transformer arrived, the K/V split was already standard vocabulary in the memory-network line of work.
 - **Fast weight programmers** {% cite schmidhuber1992learning schlag2021linear %} are an older lineage where one network produces the weights of another, and the linear-attention reduction shows that this is exactly what an attention layer does in disguise.
 
-### Why not two projectors
+### Why not two projection weight matrices
 
 Tying $Q = K$ forces queries and keys to share a representation, limiting the ability to distinguish what a token searches for from how it is addressed. There is no asymmetry with two projections, because with shared $W_Q = W_K$ the pre-softmax score matrix $X W W^{T} X^{T}$ is symmetric, so token A scores B exactly as B scores A. Without masking or other positional mechanisms, any remaining asymmetry comes from each row's normalization. This learned asymmetry can be useful for causal language modeling, dependency-style relations, and other directional computations. Tied-QK variants exist and work in some settings, but they give up this asymmetry, so three independent projections is the natural choice for an asymmetric, differentiable, content-addressable lookup.
 
@@ -67,7 +67,7 @@ The third property is a choice and one could have chosen a different inductive b
 
 ## Just won't die
 
-An alternative architecture that also has [dim-preservation properties](https://anuragxel.github.io/blog/transformer-no-bottleneck/) and the [soft-k-NN behavior](https://anuragxel.github.io/blog/transformer-soft-knn/) to emulate a soft lookup has to make three more decisions. We looked through those decisions and came away with a few interesting realizations. Tying up Q and K gives up on directional asymmetry. Non-inner-product scores give up on some really nice kernel properties. Non-softmax aggregation changes whether the per-head output is a convex combination of the values. The combination that the transformer makes is general enough that it makes the architecture stable across a variety of modalities and tasks.
+An alternative architecture that also has [dim-preservation properties](https://anuragxel.github.io/blog/transformer-no-bottleneck/) and the [soft-k-NN behavior](https://anuragxel.github.io/blog/transformer-soft-knn/) to emulate a soft lookup has to make three more decisions. We looked through those decisions and came away with a few interesting realizations. Tying up Q and K gives up learned pre-softmax directional asymmetry. The kernel connection motivates inner-product scores without making them necessary. Non-softmax aggregation can change whether the per-head output is a convex combination of the values. This combination may help explain the transformer's versatility across modalities and tasks. If I tie $W_Q = W_K$, there is a tradeoff: fewer parameters, but the learned score can no longer distinguish A looking for B from B looking for A.
 
 ## References
 

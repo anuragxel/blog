@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "Why won't the transformer die? Part 1: no information bottleneck"
-description: The capacity property that every alternative architecture has to match.
+description: A capacity property that alternatives have to contend with.
 date: 2026-05-03 11:00:00 -0500
 ---
 
@@ -11,11 +11,11 @@ I replied, "No, it has an information bottleneck embedded in its state-space ope
 
 He responded, "I suppose, but it's hard to tell what the real reasons are for why it works. You guys sometimes add 7 layers, sometimes 8 and god knows why one works and the other doesn't."
 
-I hated my own hand-waviness and decided to systematize what I know. There are several architectural properties that, taken together, make transformers hard to displace, and this is the first in a four-part series unpacking them. The simplest, and the topic of this post, is that the architecture preserves token dimensionality at every layer, so it never forces a low-dimensional summary that the rest of the model has to reconstruct.
+I hated my own hand-waviness and decided to systematize what I know. There are several architectural properties that, taken together, make transformers hard to displace, and this is the first in a four-part series unpacking them. The simplest, and the topic of this post, is that the architecture preserves token dimensionality at every layer, and retains a growing set of tokens rather than forcing the context into a fixed-size summary.
 
 ## Self-attention and cross-attention
 
-Let $X \in \mathbb{R}^{N \times d}$ be a set of $N$ tokens, each represented as a $d$-dimensional vector. **Self-attention** projects $X$ into queries, keys, and values via three learned matrices (or projectors) $W_Q, W_K \in \mathbb{R}^{d \times d_k}$ and $W_V \in \mathbb{R}^{d \times d_v}$:
+Let $X \in \mathbb{R}^{N \times d}$ be a set of $N$ tokens, each represented as a $d$-dimensional vector. **Self-attention** projects $X$ into queries, keys, and values via three learned matrices (or projection weights) $W_Q, W_K \in \mathbb{R}^{d \times d_k}$ and $W_V \in \mathbb{R}^{d \times d_v}$:
 
 $$Q = X W_Q, \quad K = X W_K, \quad V = X W_V$$
 
@@ -41,19 +41,19 @@ The biggest question is: why is almost any concept or modality so easy to conver
 
 Consider a standard ViT-B/16 {% cite dosovitskiy2021image %}. Each $16 \times 16$ RGB patch is $16 \times 16 \times 3 = 768$ floats. We linearly project each one to a $d = 768$-dimensional token, giving a set of $N$ tokens to feed into a stack of self-attention operations {% cite vaswani2017attention %}. Given $N$ input tokens, each self-attention layer outputs $N$ tokens of the same dimension.
 
-Here is the key observation. At no point does the architecture reduce the dimensionality of any token. The output of the multi-head self-attention block sits in $\mathbb{R}^{N \times d}$, exactly like the input (each head projects values to $d_v = d/h$, but the $h$ heads are concatenated and re-projected by $W_O$ back to $d$, so the block is dim-preserving even though individual heads are not). There is no architectural bottleneck through which all $N$ tokens must be projected to lower dimensional space or to few number of vectors (i.e. tokens). The block retains room for every coordinate of $X$, with residual connections providing a direct path for carrying information forward.
+Here is the key observation. Across blocks, the architecture preserves token dimensionality. The output of the multi-head self-attention block sits in $\mathbb{R}^{N \times d}$, exactly like the input (each head projects values to $d_v = d/h$, but the $h$ heads are concatenated and re-projected by $W_O$ back to $d$, so the block is dim-preserving even though individual heads are not). There is no architectural bottleneck through which all $N$ tokens must be projected to lower dimensional space or to few number of vectors (i.e. tokens). The block retains room for every coordinate of $X$, with residual connections providing a direct path for carrying information forward. This does not guarantee information preservation; the key distinction from a fixed-state recurrence is retaining individually addressable tokens.
 
 Contrast this with a state-space model like Mamba {% cite gu2024mamba %}, whose forward pass is a recurrence (shown here for the linear/time-invariant case)
 
 $$h_t = A h_{t-1} + B x_t, \quad y_t = C h_t$$
 
-with hidden state $h_t \in \mathbb{R}^{d_h}$. Every token's contribution must squeeze through this fixed-dim $h_t$ before any later token sees it. Recent DiT work shows the same effect empirically: training loss has a nonzero lower bound when model width is smaller than token dimension, and drops sharply once the two are matched {% cite zheng2025rae %}.
+with hidden state $h_t \in \mathbb{R}^{d_h}$. Every token's contribution must squeeze through this fixed-dim $h_t$ before any later token sees it. Recent DiT work shows a related width bottleneck empirically: training loss has a nonzero lower bound when model width is smaller than token dimension, and drops sharply once the two are matched {% cite zheng2025rae %}.
 
 ## Non-parametric vs parametric estimation
 
 There is a clean way to phrase the friend's question. The transformer-vs-SSM argument is the same non-parametric versus parametric estimation argument statisticians have been having for half a century {% cite wasserman2006nonparametric %}.
 
-Self-attention is non-parametric in the per-layer aggregation, not in its parameter count. The projectors $W_Q, W_K, W_V$ are fixed-dimensional and do not grow with $N$. What grows is the reference set. Queries, keys, and values are all constructed from the input itself, so the operator's effective hypothesis class scales with $N$. Capacity scales with the data. State-space models like S4 {% cite gu2022efficiently %} and Mamba {% cite gu2024mamba %}, and linear-attention variants that recast attention as a recurrence with fixed state {% cite katharopoulos2020transformers %}, are parametric in exactly this sense. Their expressive capacity is whatever fits in $h_t \in \mathbb{R}^{d_h}$, regardless of how long the context gets. Selective SSMs make the recurrence input-dependent, but the state stays a fixed-capacity bottleneck.
+Self-attention is non-parametric in the per-layer aggregation, not in its parameter count. The projection weights $W_Q, W_K, W_V$ are fixed-dimensional and do not grow with $N$. What grows is the reference set. Queries, keys, and values are all constructed from the input itself, so the operator's effective hypothesis class scales with $N$. Capacity scales with the data. State-space models like S4 {% cite gu2022efficiently %} and Mamba {% cite gu2024mamba %}, and linear-attention variants that recast attention as a recurrence with fixed state {% cite katharopoulos2020transformers %}, are parametric in exactly this sense. Their expressive capacity is whatever fits in $h_t \in \mathbb{R}^{d_h}$, regardless of how long the context gets. Selective SSMs make the recurrence input-dependent, but the state stays a fixed-capacity bottleneck.
 
 The classical tradeoff shows up here. Parametric models have constant per-step cost and bounded capacity, and that bound is the functional-form bias I have been complaining about all along. The recurrent state $h_t$ is where the bound binds: anything the recurrence cannot encode in $h_t$ has to be reconstructed by later layers or skipped. Non-parametric operators grow capacity with the reference set, paying for it in compute and memory that scale with $N$.
 
@@ -61,7 +61,7 @@ The recurrence $h_t = f(h_{t-1}, x_t)$ is intrinsically ordered, so $h_t$ summar
 
 ## Won't die
 
-Any architecture that wants to compete with transformers on generality has to follow the notion of introducing "no information bottlenecks" {% cite jelassi2024repeat %}. Also, the fact that the self-attention operator is non-parametric in its per-layer aggregation and acts as a soft $k$-NN over some metric space has deep implications in my view, which we shall cover in the next blog post.
+Avoiding fixed-size context bottlenecks may be an important advantage for architectures competing with transformers on generality {% cite jelassi2024repeat %}. For me, this suggests a concrete question when compressing context: what remains individually retrievable, and what must a summary preserve? The next post looks at how attention retrieves from that reference set, through the lens of soft $k$-NN.
 
 # References
 

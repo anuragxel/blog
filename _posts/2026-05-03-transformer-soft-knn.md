@@ -17,7 +17,7 @@ with $Q = X W_Q$, $K = X W_K$, $V = X W_V$. Output sits in $\mathbb{R}^{N \times
 
 ## Soft k-NN over a learned metric space
 
-The projection weights $Q, K, V$ are themselves functions of the input, which has very deep connections to metric learning and classical learning literature. I like to think of self-attention as doing soft $k$-NN over a learned kernel/metric space.
+The projections $Q, K, V$ are themselves functions of the input, which has very deep connections to metric learning and classical learning literature. I like to think of self-attention as doing soft $k$-NN over a learned kernel/metric space.
 
 To see why, look at the score we feed into softmax. For two tokens $x_i, x_j \in \mathbb{R}^d$, the unnormalized similarity expands as
 
@@ -47,7 +47,7 @@ So the architecture is parameterizing soft $k$-NN regression, but with three dis
 2. **The label space, via the $V$ projection.** The "labels" attached to each reference point are themselves learned functions of the input. A token's $v_j$ is its "label" for the $k$-NN.
 3. **The reference set, via the context window.** Classical $k$-NN draws references from a fixed training set. Self-attention draws them from whatever happens to be in the current input. Every input set $X$ gets its own reference pool, on the fly.
 
-That is why the same operation works for image patches, text tokens, audio frames, point clouds {% cite zhao2021point %}, and graph nodes {% cite velickovic2018graph %}. Whatever the modality, the layer asks the same question: which of these other tokens are like me, in the metric I have learned to care about, and what should I copy from them?
+This helps explain why the same operation works for image patches, text tokens, audio frames, point clouds {% cite zhao2021point %}, and graph nodes {% cite velickovic2018graph %}. Whatever the modality, the layer asks the same question: which of these other tokens are like me, in the metric I have learned to care about, and what should I copy from them?
 
 ## Implications from classical learning literature
 
@@ -65,7 +65,7 @@ The factor-of-two slack disappears once we let $k$ grow. Stone's theorem {% cite
 
 The catch is that asymptotic guarantees can coexist with poor finite-sample performance when the metric is unhelpful. With Euclidean distance on raw pixels, the "nearest neighbor" of a cat picture is often a different cat-shaped patch of color and not another cat. Classical $k$-NN binds against a meaningless notion of nearness, and degrades catastrophically in high dimensions, where pairwise distances concentrate and the very notion of a "nearest" point loses its meaning {% cite beyer1999nearest %}. The guarantees are asymptotic; making nearest-neighbor methods useful with finite data depends heavily on the representation.
 
-This is the gap self-attention closes. Training $M = W_Q W_K^{T}$ end-to-end picks the inner product under which "nearest by $M$" correlates with "same downstream label". The classical statements do not transfer formally to attention (the reference set is in-context rather than iid, the ``metric'' is learned jointly with the labels, the aggregation is soft rather than top-$k$, and the kernel $\exp(x_i^{T} M x_j / \sqrt{d_k})$ is asymmetric and not Mercer because $M$ is not symmetric), but my conjecture is that self-attention inherits the qualitative behavior of non-parametric $k$-NN: improving predictions as the relevant reference set grows.
+Self-attention offers a way to address this gap. Training $M = W_Q W_K^{T}$ end-to-end can learn similarities useful for the downstream task. The classical statements do not transfer formally to attention (the reference set is in-context rather than iid, the ``metric'' is learned jointly with the labels, the aggregation is soft rather than top-$k$, and the kernel $\exp(x_i^{T} M x_j / \sqrt{d_k})$ is asymmetric and not Mercer because $M$ is not symmetric), but my conjecture is that self-attention inherits the qualitative behavior of non-parametric $k$-NN: improving predictions as the relevant reference set grows.
 
 The soft version also sidesteps the one remaining choice of classical $k$-NN, namely $k$ itself. Every query attends to all $N$ tokens, and the softmax coefficients implicitly handle the effective neighborhood size through their entropy. Tokens with low similarity get exponentially small weight and contribute almost nothing, while a few high-similarity tokens dominate the average.
 
@@ -83,13 +83,15 @@ The heads provide separate channels for different modes of relevance, keeping th
 
 Pretraining can be seen as metric learning in this light. Each self-attention layer performs soft $k$-NN over its own learned metric, so any training loss that updates $W_Q$ and $W_K$ is also optimizing the inner product that decides which tokens score high together at that layer. The objective does not have to be a contrastive metric-learning loss explicitly. Masked language modeling, masked image modeling, and contrastive image-text losses all train these per-layer metrics, just with different supervision signals.
 
-Consider DINO {% cite caron2021emerging %} and DINOv2 {% cite oquab2024dinov2 %}, or any image/video foundation model. Why are their features so general? You train layer-wise soft $k$-NN over each image's tokens, across an astonishingly large collection of images, and the network learns the metric space in which that layer-wise soft $k$-NN works. Both report $k$-NN classification accuracy on frozen features as a flagship evaluation alongside linear probing, on the basis that a well-trained representation should already place same-class examples near each other in the learned space. CLIP {% cite radford2021learning %} works the same way at inference time, scoring an image embedding against a set of text embeddings with cosine similarity, which is the cross-attention score with hard top-1 selection.
+Consider DINO {% cite caron2021emerging %}, DINOv2 {% cite oquab2024dinov2 %}, or any image/video foundation model. This lens may partly help explain their feature quality, though within-image attention alone does not establish across-image similarity. You train layer-wise soft $k$-NN over each image's tokens, across an astonishingly large collection of images, and the network learns the metric space in which that layer-wise soft $k$-NN works. Both report $k$-NN classification accuracy on frozen features as a flagship evaluation alongside linear probing, on the basis that a well-trained representation should already place same-class examples near each other in the learned space. CLIP {% cite radford2021learning %} works the same way at inference time, scoring an image embedding against a set of text embeddings with cosine similarity, which is the cross-attention score with hard top-1 selection.
 
 That $k$-NN is a hard baseline to beat is not a deep-learning-era observation. Beyond the bounds {% cite cover1967nearest %}, universal consistency results {% cite stone1977consistent %}, the practical folklore has been repeated, including the explicit defense of naive nearest-neighbor classification on image features as competitive {% cite boiman2008defense %}. The same pattern keeps recurring in the deep era: $k$-NN on top of language model representations improves perplexity {% cite khandelwal2020generalization %}, retrieval-augmented generation lifts large LMs {% cite lewis2020retrieval %}.
 
 ## Still won't die
 
-For a competing architecture to work across modalities the way transformers do, it has to support learned similarity, learned labels, and a context-shaped reference set. Architectures that fix any of the three (RNNs and SSMs that compress the reference set into a fixed-size hidden state, MLPs without context-dependent retrieval) have to pay for it in modality-specific tuning or task-specific architecture. The next post zooms in on the three specific design choices inside this lookup, asking why three projectors, why the inner product, and why softmax.
+Learned similarity, learned labels, and a context-shaped reference set may help explain why transformers work across modalities. Architectures that constrain these properties (RNNs and SSMs that compress the reference set into a fixed-size hidden state, MLPs without context-dependent retrieval) may need other mechanisms to recover similar flexibility.
+
+The distinction I find useful when changing a model is whether I am changing the learned similarity, the values being retrieved, or the available reference set. The next post zooms in on the three specific design choices inside this lookup, asking why three projection weight matrices, why the inner product, and why softmax.
 
 # References
 
