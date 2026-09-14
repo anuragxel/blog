@@ -35,6 +35,13 @@ $$\mathrm{CrossAttn}(X, Y) = \mathrm{softmax}\!\left( \frac{Q K^{T}}{\sqrt{d_k}}
 
 Each of the $N$ target tokens attends over all $M$ source tokens. Self-attention is the special case $Y = X$ (so $M = N$).
 
+<figure class="concept-figure">
+  <a href="{{ '/assets/images/transformer/self-vs-cross.png' | relative_url }}">
+    <img src="{{ '/assets/images/transformer/self-vs-cross.png' | relative_url }}" width="640" height="500" loading="lazy" alt="Self-attention obtains Q, K, and V from X. Cross-attention obtains Q from X and K and V from Y. The output has N rows in both cases, matching the queries, even when Y has M rows.">
+  </a>
+  <figcaption>Change the source of keys and values; the output still has one row per query.</figcaption>
+</figure>
+
 ## No bottleneck
 
 The biggest question is: why is almost any concept or modality so easy to convert into a transformer?
@@ -48,6 +55,13 @@ Contrast this with a state-space model like Mamba {% cite gu2024mamba %}, whose 
 $$h_t = A h_{t-1} + B x_t, \quad y_t = C h_t$$
 
 with hidden state $h_t \in \mathbb{R}^{d_h}$. Every token's contribution must squeeze through this fixed-dim $h_t$ before any later token sees it. Recent DiT work shows a related width bottleneck empirically: training loss has a nonzero lower bound when model width is smaller than token dimension, and drops sharply once the two are matched {% cite zheng2025rae %}.
+
+<figure class="concept-figure">
+  <a href="{{ '/assets/images/transformer/token-bottleneck.png' | relative_url }}">
+    <img src="{{ '/assets/images/transformer/token-bottleneck.png' | relative_url }}" width="640" height="435" loading="lazy" alt="A transformer block keeps an N by d token matrix. A recurrent update combines the current token with a fixed-width previous state to produce another fixed-width state.">
+  </a>
+  <figcaption>The transformer retains N addressable token slots. A recurrence carries a fixed-size state; matching input and output shapes alone does not guarantee information preservation.</figcaption>
+</figure>
 
 ## Non-parametric vs parametric estimation
 

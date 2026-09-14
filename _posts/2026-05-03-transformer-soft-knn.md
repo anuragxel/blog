@@ -41,6 +41,13 @@ which is a Nadaraya-Watson estimator {% cite nadaraya1964estimating watson1964sm
 - $\mathrm{softmax}(q_i^{T} k_j / \sqrt{d_k})$ is a soft membership function. Instead of hard top-$k$ selection, you get a probability distribution over neighbors weighted by learned similarity.
 - The output $\sum_j \alpha_{ij} v_j$ is the soft $k$-NN prediction, a weighted average of neighbor labels.
 
+<figure class="concept-figure">
+  <a href="{{ '/assets/images/transformer/soft-knn.png' | relative_url }}">
+    <img src="{{ '/assets/images/transformer/soft-knn.png' | relative_url }}" width="640" height="580" loading="lazy" alt="Two aligned flows map a k-NN test point, reference set, labels, and prediction to an attention query, keys, values, and output. k-NN selects neighbors; attention softly weights their values.">
+  </a>
+  <figcaption>The same lookup pattern: match references, then aggregate their labels or values. Line thickness indicates attention weight.</figcaption>
+</figure>
+
 So the architecture is parameterizing soft $k$-NN regression, but with three distinct differences from classical $k$-NN:
 
 1. **The metric, via the $Q, K$ projections.** Classical kernel methods commit to a kernel up front (RBF, polynomial, Matern), and the choice encodes a strong prior about what "similar" means. Self-attention learns the similarity from data.
@@ -78,6 +85,13 @@ Softmax is a soft argmax over the keys, with sharpness controlled by $1/\sqrt{d_
 Once a task requires picking out two unrelated things at once (attend to the subject *and* the object, look back $\delta_1$ tokens *and* $\delta_2$ tokens, match shape *and* texture), a single linear score function has to pick a direction that compromises between them, and the softmax assigns mass accordingly. Multi-head attention learns $h$ different metrics $M_i = W_{Q,i} W_{K,i}^{T}$ for $i = 1, \ldots, h$ in parallel, so each query gets $h$ different linear score functions and can put mass in $h$ different directions of key-space at once. The concatenation is the union of $h$ soft $k$-NN lookups, each in its own metric.
 
 The heads provide separate channels for different modes of relevance, keeping their retrieved results distinct before mixing. Subspace metric learning in the classical sense did this by hand, picking a few different metrics for a few different aspects of the data. Multi-head attention does it end-to-end, with the $h$ metrics learned jointly with the rest of the model.
+
+<figure class="concept-figure">
+  <a href="{{ '/assets/images/transformer/multi-head-lookups.png' | relative_url }}">
+    <img src="{{ '/assets/images/transformer/multi-head-lookups.png' | relative_url }}" width="640" height="350" loading="lazy" alt="The same token branches into two head-specific soft lookups over the context. Their retrieved outputs stay separate, concatenate, and pass through the output projection W O.">
+  </a>
+  <figcaption>For the same token, each head retrieves from context X using its own learned similarity and value transform. The similarity need not be a mathematical metric. Concatenation keeps head outputs separate before mixing.</figcaption>
+</figure>
 
 ## The unreasonable effectiveness of linear and k-NN probes
 

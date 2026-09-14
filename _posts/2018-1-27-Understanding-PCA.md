@@ -66,6 +66,13 @@ $$ = \mathbf{max} \quad p^{T}Sp \quad s.t. \quad p^{T}p = 1 $$
 
 Here, $S = X^{T}X$ is called the scatter matrix (or the unnormalized covariance matrix). It’s important to remember the data is zero centred and the equation is pretty similar otherwise.
 
+<figure class="concept-figure">
+  <a href="{{ '/assets/images/pca/projection-reconstruction.png' | relative_url }}">
+    <img src="{{ '/assets/images/pca/projection-reconstruction.png' | relative_url }}" width="640" height="380" loading="lazy" alt="Centered points project orthogonally onto the principal direction p. Dashed perpendicular segments connect each point to its reconstruction. Total squared norm splits into projected squared norm and squared reconstruction error.">
+  </a>
+  <figcaption>For a unit direction p and fixed centered data, maximizing projected variance is equivalent to minimizing squared perpendicular reconstruction error.</figcaption>
+</figure>
+
 ### Proof of Equivalence
 
 Now, a little bit of linear algebra to show that they are equivalent. Let’s start with the first formulation and show that it’s equivalent to the second formulation.

@@ -33,6 +33,13 @@ Differentiable content-addressable memory has been a recurring research goal for
 
 Tying $Q = K$ forces queries and keys to share a representation, limiting the ability to distinguish what a token searches for from how it is addressed. There is no asymmetry with two projections, because with shared $W_Q = W_K$ the pre-softmax score matrix $X W W^{T} X^{T}$ is symmetric, so token A scores B exactly as B scores A. Without masking or other positional mechanisms, any remaining asymmetry comes from each row's normalization. This learned asymmetry can be useful for causal language modeling, dependency-style relations, and other directional computations. Tied-QK variants exist and work in some settings, but they give up this asymmetry, so three independent projections is the natural choice for an asymmetric, differentiable, content-addressable lookup.
 
+<figure class="concept-figure">
+  <a href="{{ '/assets/images/transformer/tied-qk-scores.png' | relative_url }}">
+    <img src="{{ '/assets/images/transformer/tied-qk-scores.png' | relative_url }}" width="640" height="340" loading="lazy" alt="With tied query and key weights, the A-to-B and B-to-A entries of the score matrix must match. Separate weights allow those two entries to differ.">
+  </a>
+  <figcaption>Tying Q/K weights forces symmetric dot-product scores. This is before softmax, masking, or additional positional terms; row normalization can still produce asymmetric attention weights.</figcaption>
+</figure>
+
 ## Why inner product?
 
 We have settled on three projections, but why is the score itself an inner product? Why not Euclidean distance, cosine, an MLP applied to concatenated $(q, k)$, or any of the other plausible similarities?
@@ -62,6 +69,13 @@ What does the probability simplex commit us to? Three things that get conflated:
 1. **Boundedness.** $\alpha_i \in [0, 1]$, which is useful for numerically stable downstream computation.
 2. **Comparability across contexts.** $\sum_i \alpha_i = 1$, so a weight of $0.9$ means the same thing whether the context has 3 keys or 1000 keys. Without it, comparing attention patterns across sequence lengths is not well-defined.
 3. **Convex combination.** The output $\sum_i \alpha_i v_i$ lives in the convex hull of the values $\{v_i\}$. The contextualized output is *somewhere among* the value vectors, never outside.
+
+<figure class="concept-figure">
+  <a href="{{ '/assets/images/transformer/attention-convex-hull.png' | relative_url }}">
+    <img src="{{ '/assets/images/transformer/attention-convex-hull.png' | relative_url }}" width="640" height="325" loading="lazy" alt="Three value vectors form a triangle. Nonnegative attention weights that sum to one place their weighted average inside the triangle.">
+  </a>
+  <figcaption>The softmax-weighted sum lies in the values’ convex hull, before attention dropout, output projection, or residual addition.</figcaption>
+</figure>
 
 The third property is a choice and one could have chosen a different inductive bias (for example, sigmoid attention).
 
