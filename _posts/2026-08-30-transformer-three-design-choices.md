@@ -22,9 +22,9 @@ with the softmax replacing the hard $\arg\max$ by a weighted average. In `memory
 
 <figure class="concept-figure">
   <a href="{{ '/assets/images/transformer/array-vs-attention.png' | relative_url }}">
-    <img src="{{ '/assets/images/transformer/array-vs-attention.png' | relative_url }}" width="640" height="650" loading="lazy" alt="A pointer p requests stored address a 2 and returns its contents v 2. In attention, the query plays the requested-address role, keys play stored-address roles, and values are the stored contents. Attention produces a weighted blend of the values.">
+    <img src="{{ '/assets/images/transformer/array-vs-attention.png' | relative_url }}" width="640" height="650" loading="lazy" alt="A memory lookup requests address a 2 and returns its contents v 2. In attention, the query plays the requested-address role, keys play stored-address roles, and values are the stored contents. Attention produces a weighted blend of the values.">
   </a>
-  <figcaption>Requested address → query; stored addresses → keys; stored contents → values. Storage holds the address–content pairs. A pointer reads one value; attention returns a weighted blend.</figcaption>
+  <figcaption>Requested address → query; memory addresses → keys; memory contents → values. An exact lookup returns one stored value; attention returns a weighted blend.</figcaption>
 </figure>
 
 ### From classical theory of computation

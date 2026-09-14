@@ -145,14 +145,14 @@ def convex():
 
 
 def array_attention():
-    s = start('Pointer, storage, and output as a soft lookup',
-              'Two aligned flows compare addressed memory with attention. A pointer p holding address a 2 selects storage contents v 2. Attention uses query q to score stored keys and blend their associated values. The requested address corresponds to the query, stored addresses to keys, and stored contents to values. Storage contains both the addressing scheme and its associated contents; the attention output is a weighted blend, not necessarily one stored value.', 650)
+    s = start('Memory lookup and attention as a soft lookup',
+              'Two aligned flows compare addressed memory with attention. A requested address a 2 retrieves contents v 2 from memory. Attention uses query q to score stored keys and blend their associated values. The requested address corresponds to the query, memory addresses to keys, and memory contents to values. The memory drawing associates addresses with contents; the attention output is a weighted blend, not necessarily one stored value.', 650)
     for offset, soft in [(0, False), (325, True)]:
         s.append(f'<g transform="translate(0 {offset})">')
-        text(s, 24, 32, 'Attention: soft lookup' if soft else 'Array / memory lookup', size=25, anchor='start')
-        text(s, 76, 77, 'query' if soft else 'pointer', BLUE, 21)
-        text(s, 305, 77, 'key–value memory' if soft else 'storage', size=20)
-        text(s, 560, 77, 'output', GREEN, 21)
+        text(s, 24, 32, 'Attention: soft lookup' if soft else 'Memory lookup', size=25, anchor='start')
+        text(s, 76 if soft else 90, 77, 'query' if soft else 'requested address', BLUE, 21 if soft else 16)
+        text(s, 305, 77, 'key–value memory' if soft else 'memory', size=20)
+        text(s, 560, 77, 'weighted output' if soft else 'returned value', GREEN, 18)
         path(s, 'M197 90 H412 V284 H197 Z', '#b6b6bc', 1.5)
         text(s, 244, 115, 'keys' if soft else 'addresses', BLUE, 18)
         text(s, 364, 115, 'values' if soft else 'contents', GREEN, 18)
@@ -161,16 +161,16 @@ def array_attention():
             active = widths[j] > 0
             color_k, color_v = (BLUE, GREEN) if active else (FAINT, FAINT)
             if active:
-                path(s, f'M{100 if soft else 130} 200 Q163 {y} 217 {y}', BLUE, widths[j])
+                path(s, f'M100 200 Q163 {y} 217 {y}', BLUE, widths[j])
                 path(s, f'M391 {y} Q469 {y} 520 200', GREEN, widths[j])
             box(s, 220, y-18, 48, 36, [('k' if soft else 'a')+sub], color_k, size=23)
             path(s, f'M280 {y} H329', FAINT, 1.4, dash=True)
             box(s, 340, y-18, 48, 36, ['v'+sub], color_v, size=23)
         arrow(s, 520, 200, 539, 200, GREEN)
-        text(s, 76, 208, 'q' if soft else 'p = a₂', BLUE, 26)
+        text(s, 76, 208, 'q' if soft else 'a₂', BLUE, 26)
         text(s, 560, 208, 'o' if soft else 'v₂', GREEN, 29)
-        text(s, 160, 313, 'similarity → softmax' if soft else 'read at address p', BLUE, 19)
-        text(s, 467, 313, 'o = Σⱼ αⱼ vⱼ' if soft else '*p = v₂', GREEN, 22)
+        text(s, 160, 313, 'similarity → softmax' if soft else 'exact lookup', BLUE, 19)
+        text(s, 467, 313, 'o = Σⱼ αⱼ vⱼ' if soft else 'memory[a₂] → v₂', GREEN, 22)
         s.append('</g>')
     path(s, 'M24 323 H616', '#dedee2', 1)
     save(s, 'array-vs-attention.png')
