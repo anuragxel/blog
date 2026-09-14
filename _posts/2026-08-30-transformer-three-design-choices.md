@@ -22,9 +22,9 @@ with the softmax replacing the hard $\arg\max$ by a weighted average. In `memory
 
 <figure class="concept-figure">
   <a href="{{ '/assets/images/transformer/array-vs-attention.png' | relative_url }}">
-    <img src="{{ '/assets/images/transformer/array-vs-attention.png' | relative_url }}" width="640" height="650" loading="lazy" alt="A memory lookup requests address a 2 and returns its contents v 2. In attention, the query plays the requested-address role, keys play stored-address roles, and values are the stored contents. Attention produces a weighted blend of the values.">
+    <img src="{{ '/assets/images/transformer/array-vs-attention.png' | relative_url }}" width="640" height="650" loading="lazy" alt="A memory lookup requests address a 2 and returns its contents v 2. In attention, the query plays the requested-address role, keys play stored-address roles, and values are the stored contents. Attention produces a weighted sum of the values.">
   </a>
-  <figcaption>Requested address → query; memory addresses → keys; memory contents → values. An exact lookup returns one stored value; attention returns a weighted blend.</figcaption>
+  <figcaption>Requested address → query; memory addresses → keys; memory contents → values. An exact lookup returns one stored value; attention returns a weighted sum.</figcaption>
 </figure>
 
 ### From classical theory of computation
@@ -79,7 +79,7 @@ What does the probability simplex commit us to? Three things that get conflated:
 
 <figure class="concept-figure">
   <a href="{{ '/assets/images/transformer/attention-convex-hull.png' | relative_url }}">
-    <img src="{{ '/assets/images/transformer/attention-convex-hull.png' | relative_url }}" width="640" height="325" loading="lazy" alt="Three value vectors form a triangle. Nonnegative attention weights that sum to one place their weighted average inside the triangle.">
+    <img src="{{ '/assets/images/transformer/attention-convex-hull.png' | relative_url }}" width="640" height="325" loading="lazy" alt="Three value vectors form a triangle. Nonnegative attention weights that sum to one place their weighted sum inside the triangle.">
   </a>
   <figcaption>The softmax-weighted sum lies in the values’ convex hull, before attention dropout, output projection, or residual addition.</figcaption>
 </figure>

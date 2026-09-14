@@ -129,7 +129,7 @@ def tied_scores():
 
 def convex():
     s = start('Softmax mixes values inside their convex hull',
-              'Three value vectors form the vertices of a triangle. A weighted average with nonnegative weights summing to one lies inside their triangle. The diagram illustrates one head output before output projection and residual addition.', 325)
+              'Three value vectors form the vertices of a triangle. A weighted sum with nonnegative weights summing to one lies inside their triangle. The diagram illustrates one head output before output projection and residual addition.', 325)
     pts = [(80, 249), (178, 62), (307, 249)]
     s.append('<path d="M80 249 L178 62 L307 249 Z" fill="#17803d" fill-opacity="0.06" stroke="#17803d" stroke-width="2"/>')
     for (x,y), label, dx, dy in zip(pts, ['v₁','v₂','v₃'], [-19,0,19], [28,-20,28]):
@@ -146,13 +146,13 @@ def convex():
 
 def array_attention():
     s = start('Memory lookup and attention as a soft lookup',
-              'Two aligned flows compare addressed memory with attention. A requested address a 2 retrieves contents v 2 from memory. Attention uses query q to score stored keys and blend their associated values. The requested address corresponds to the query, memory addresses to keys, and memory contents to values. The memory drawing associates addresses with contents; the attention output is a weighted blend, not necessarily one stored value.', 650)
+              'Two aligned flows compare addressed memory with attention. A requested address a 2 retrieves contents v 2 from memory. Attention uses query q to score stored keys and compute a weighted sum of their associated values. The requested address corresponds to the query, memory addresses to keys, and memory contents to values. The memory drawing associates addresses with contents; the attention output is a weighted sum, not necessarily one stored value.', 650)
     for offset, soft in [(0, False), (325, True)]:
         s.append(f'<g transform="translate(0 {offset})">')
         text(s, 24, 32, 'Attention: soft lookup' if soft else 'Memory lookup', size=25, anchor='start')
         text(s, 76 if soft else 90, 77, 'query' if soft else 'requested address', BLUE, 21 if soft else 16)
         text(s, 305, 77, 'key–value memory' if soft else 'memory', size=20)
-        text(s, 560, 77, 'weighted output' if soft else 'returned value', GREEN, 18)
+        text(s, 560, 77, 'weighted sum' if soft else 'returned value', GREEN, 18)
         path(s, 'M197 90 H412 V284 H197 Z', '#b6b6bc', 1.5)
         text(s, 244, 115, 'keys' if soft else 'addresses', BLUE, 18)
         text(s, 364, 115, 'values' if soft else 'contents', GREEN, 18)

@@ -25,7 +25,7 @@ is a fixed form $M = W_Q W_K^{T}$. The metric $M$ is parametric and the same for
   <a href="{{ '/assets/images/transformer/weights-vs-projections.png' | relative_url }}">
     <img src="{{ '/assets/images/transformer/weights-vs-projections.png' | relative_url }}" width="640" height="390" loading="lazy" alt="The same input X branches through separate projection weights W Q, W K, and W V to produce Q, K, and V. Weights are fixed at inference; projections depend on X.">
   </a>
-  <figcaption>Self-attention: the same input supplies queries, keys, and values through three separate learned weight matrices.</figcaption>
+  <figcaption>Self-attention: the same input supplies queries, keys, and values through three separate learned projection weight matrices.</figcaption>
 </figure>
 
 The separation enables composition. The attention parts of a stacked transformer can be read as $L$ soft $k$-NN lookups, each with its own learned metric and head structure, each operating on the reference set produced by the layer below. The MLP blocks between attention layers add parametric nonlinearities that the $k$-NN view ignores, and most of the parameter budget is concentrated there rather than the projection weights.

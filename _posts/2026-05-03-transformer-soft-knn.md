@@ -45,7 +45,7 @@ which is a Nadaraya-Watson estimator {% cite nadaraya1964estimating watson1964sm
   <a href="{{ '/assets/images/transformer/soft-knn.png' | relative_url }}">
     <img src="{{ '/assets/images/transformer/soft-knn.png' | relative_url }}" width="640" height="580" loading="lazy" alt="Two aligned flows map a k-NN test point, reference set, labels, and prediction to an attention query, keys, values, and output. k-NN selects neighbors; attention softly weights their values.">
   </a>
-  <figcaption>The same lookup pattern: match references, then aggregate their labels or values. Line thickness indicates attention weight.</figcaption>
+  <figcaption>The same lookup pattern: match references, then retrieve their labels or values. Attention returns a weighted sum of values; line thickness indicates attention weight.</figcaption>
 </figure>
 
 So the architecture is parameterizing soft $k$-NN regression, but with three distinct differences from classical $k$-NN:
