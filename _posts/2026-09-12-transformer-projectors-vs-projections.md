@@ -103,9 +103,9 @@ Matching dimensions is one aspect; training must make the encoder's features use
 
 <figure class="concept-figure">
   <a href="{{ '/assets/images/transformer/multimodal-adapter.png' | relative_url }}">
-    <img src="{{ '/assets/images/transformer/multimodal-adapter.png' | relative_url }}" width="640" height="390" loading="lazy" alt="The adapter maps Visual features of width d v into LinguoVisual tokens of width d. These join Language tokens of width d at the language model input, corresponding to the conceptual union type described in the text.">
+    <img src="{{ '/assets/images/transformer/multimodal-adapter.png' | relative_url }}" width="640" height="390" loading="lazy" alt="The adapter maps Type[Visual] features of width d v into Type[LinguoVisual] tokens of width d. These join Type[Language] tokens at the VLM input, labeled Type[Union[Language, LinguoVisual]].">
   </a>
-  <figcaption>The adapter connects Visual to LinguoVisual; the LLM accepts Language or LinguoVisual tokens. These are conceptual types, with compatibility learned through alignment.</figcaption>
+  <figcaption>The adapter connects Type[Visual] to Type[LinguoVisual]; the VLM accepts Type[Union[Language, LinguoVisual]]. These are conceptual types, with compatibility learned through alignment.</figcaption>
 </figure>
 
 For a complementary software-engineering treatment of transformer interfaces and types, see Nelson Elhage's [*Transformers for software engineers*](https://blog.nelhage.com/post/transformers-for-software-engineers/).

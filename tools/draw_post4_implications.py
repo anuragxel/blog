@@ -21,7 +21,7 @@ def down(s, x, y1, y2, color=INK):
 
 
 def rag():
-    s = start('RAG adds references to the context', 'The original context and retrieved document tokens combine into input X. Self-attention processes this expanded context with the same projection weights. Context and document tokens have the same width d; concatenation grows the row count from N to N plus M.', 300)
+    s = start('RAG adds references to the context', 'The original context and retrieved document tokens combine into input X. Attention processes this expanded context with the same projection weights. Context and document tokens have the same width d; concatenation grows the row count from N to N plus M.', 300)
     text(s, 93, 37, 'context', BLUE)
     matrix(s, 54, 50, 78, 55, BLUE)
     text(s, 93, 130, 'N × d', BLUE, 18)
@@ -37,7 +37,7 @@ def rag():
     for y, color in [(75, BLUE), (99, BLUE), (123, BLUE), (150, GREEN), (174, GREEN), (198, GREEN)]:
         path(s, f'M239 {y} H275', color, 1.8)
     arrow(s, 301, 137, 340, 137)
-    box(s, 352, 106, 153, 64, ['self-attention'])
+    box(s, 352, 106, 153, 64, ['attention'])
     text(s, 428, 204, 'same weights', size=18)
     arrow(s, 519, 137, 557, 137)
     text(s, 596, 144, 'out', GREEN)
@@ -105,7 +105,7 @@ def reuse():
 
 def multimodal():
     s = start('The adapter connects visual and language token interfaces',
-              'A vision encoder produces Z with shape N v by d v and conceptual Type Visual. The learned adapter W A maps Z to H v with shape N v by d and conceptual Type LinguoVisual. Text tokens of Type Language have width d too. The language model accepts both kinds after alignment training. These are conceptual types, not formal type guarantees.', 390)
+              'A vision encoder produces Z with shape N v by d v and conceptual Type[Visual]. The learned adapter W A maps Z to H v with shape N v by d and conceptual Type[LinguoVisual]. Text tokens of Type[Language] have width d too. The VLM input has conceptual Type[Union[Language, LinguoVisual]] after alignment training. These are conceptual types, not formal type guarantees.', 390)
     text(s, 72, 40, 'image', BLUE, 20)
     down(s, 72, 51, 85, BLUE)
     box(s, 20, 98, 104, 64, ['vision', 'encoder'])
@@ -113,7 +113,7 @@ def multimodal():
     text(s, 201, 83, 'Z', BLUE, 25)
     matrix(s, 177, 105, 48, 52, BLUE)
     text(s, 201, 188, 'Nᵥ × dᵥ', BLUE, 18)
-    text(s, 201, 214, 'Visual', BLUE, 20)
+    text(s, 201, 214, 'Type[Visual]', BLUE, 18)
     arrow(s, 239, 130, 271, 130)
     box(s, 284, 102,  60, 56, ['W_A'])
     text(s, 314, 83, 'adapter', size=18)
@@ -121,16 +121,16 @@ def multimodal():
     text(s, 435, 83, 'Hᵥ', GREEN, 25)
     matrix(s, 409, 105, 52, 52, GREEN)
     text(s, 435, 188, 'Nᵥ × d', GREEN, 18)
-    text(s, 435, 214, 'LinguoVisual', GREEN, 19)
+    text(s, 435, 214, 'Type[LinguoVisual]', GREEN, 18)
     arrow(s, 475, 130, 544, 130, GREEN)
     box(s, 556, 102,  60, 56, ['LLM'])
     text(s, 306, 270, 'text tokens', BLUE, 19)
-    text(s, 306, 300, 'Language', BLUE, 20)
+    text(s, 306, 300, 'Type[Language]', BLUE, 18)
     matrix(s, 409, 252, 52, 50, BLUE)
     text(s, 435, 327, 'Nₜ × d', BLUE, 18)
     path(s, 'M475 277 H524 V143', BLUE)
     path(s, 'M519 151 L524 143 L529 151', BLUE)
-    text(s, 320, 363, 'LLM input: Language | LinguoVisual', size=20)
+    text(s, 320, 363, 'VLM input: Type[Union[Language, LinguoVisual]]', size=19)
     save(s, 'multimodal-adapter.png')
 
 
