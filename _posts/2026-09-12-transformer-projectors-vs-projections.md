@@ -37,6 +37,13 @@ So a trillion-parameter transformer decomposes into:
 3. **MLP blocks** between attention layers, the parametric nonlinearities that compose with the soft $k$-NN aggregation. These blocks typically account for most of a transformer's parameters.
 4. **Embedding and unembedding matrices.**
 
+<figure class="concept-figure">
+  <a href="{{ '/assets/images/transformer/parameter-overview.png' | relative_url }}">
+    <img src="{{ '/assets/images/transformer/parameter-overview.png' | relative_url }}" width="640" height="480" loading="lazy" alt="Embedding and unembedding matrices surround L transformer layers. Within a layer, h heads have separate Q, K, and V weight matrices; head outputs concatenate, pass through W O, then the MLP. Numbered markers match the four parameter groups in the list.">
+  </a>
+  <figcaption>The four parameter groups, numbered as above. Heads and layers have distinct weights; residual paths and normalization are omitted.</figcaption>
+</figure>
+
 The $k$-NN view explains the per-layer aggregation operation. MLPs also store learned associations, which the $k$-NN view does not address. Probing the MLP blocks directly {% cite geva2021transformer %} shows that the two feed-forward matrices behave like a static key-value memory of their own.
 
 A handful of implications fall out cleanly from this picture.

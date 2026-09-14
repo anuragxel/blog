@@ -134,6 +134,51 @@ def multimodal():
     save(s, 'multimodal-adapter.png')
 
 
+def parameter_overview():
+    s = start('The four main parameter groups in a transformer',
+              'Embedding and unembedding matrices surround L transformer layers. An expanded layer shows h parallel attention heads, each with separate W Q, W K, and W V weights. Head outputs concatenate, pass through output projection W O, and then through the MLP. Numbered markers correspond to the four items in the post. Norms and residual paths are omitted; head and layer weights are distinct.', 480)
+
+    def number(x, y, label):
+        s.append(f'<circle cx="{x}" cy="{y}" r="11" fill="white" stroke="{INK}" stroke-width="1.5"/>')
+        text(s, x, y+5, label, size=15)
+
+    number(39,  20, '4')
+    number(504, 20, '4')
+    box(s, 24, 40, 130, 56, ['embedding'])
+    arrow(s, 168, 68, 232, 68)
+    box(s, 246, 40, 146, 56, ['L layers'])
+    arrow(s, 406, 68, 476, 68)
+    box(s, 490, 40, 126, 56, ['unembedding'], size=18)
+    path(s, 'M319 106 V135', INK, 1.5, dash=True)
+    path(s, 'M314 127 L319 135 L324 127', INK, 1.5)
+
+    path(s, 'M18 146 H622 V449 H18 Z', '#b6b6bc', 1.5)
+    text(s, 70, 174, 'one layer', size=17)
+    text(s, 231, 174, 'per-head', size=18)
+    path(s, 'M104 186 H365 V390 H104 Z', '#b6b6bc', 1.3, dash=True)
+    text(s,    42, 297, 'X', BLUE, 26)
+    path(s, 'M61 288 H88 M88 228 V348', BLUE)
+    number(153, 198, '1')
+    for y, name, color in [(228, 'Q', BLUE), (288, 'K', BLUE), (348, 'V', GREEN)]:
+        arrow(s, 88, y, 115, y, BLUE)
+        box(s, 126, y-18, 56, 36, ['W_'+name], color, size=22)
+        arrow(s, 194, y, 209, y, color)
+        text(s, 229, y+7, name, color, 22)
+        arrow(s, 244, y, 255, y, color)
+    box(s, 266, 207,    86, 162, ['attention'], size=18)
+    text(s, 231, 422, 'h parallel heads', size=20)
+    arrow(s, 366, 288, 388, 288)
+    matrix(s, 399, 257, 34, 62, GREEN)
+    text(s, 416, 342, 'concat', size=17)
+    arrow(s, 445, 288, 460, 288)
+    number(489, 245, '2')
+    box(s, 471, 265,  50, 46, ['W_O'], size=23)
+    arrow(s, 534, 288, 550, 288)
+    number(588, 245, '3')
+    box(s, 562, 265,  50, 46, ['MLP'], size=19)
+    save(s, 'parameter-overview.png')
+
+
 if __name__ == '__main__':
-    for draw in (rag, kv_cache, tools, reuse, multimodal):
+    for draw in (parameter_overview, rag, kv_cache, tools, reuse, multimodal):
         draw()
