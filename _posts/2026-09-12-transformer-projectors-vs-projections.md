@@ -61,7 +61,7 @@ Retrieval-augmented generation {% cite lewis2020retrieval %} augments the contex
 
 ## The KV cache is the cached reference set
 
-At autoregressive inference, the $K$ and $V$ projections of past tokens never change once computed, because the projection weights $W_K, W_V$ are fixed, the past tokens are fixed, and causal masking prevents past positions from attending to newly appended tokens. They are cached once and reused for every subsequent generation step. Each new query position recomputes only its own $q, k, v$ and runs one fresh attention lookup against the cached reference set. The memory cost of the cache scales linearly with context length, because it is literally storing the reference set the per-layer $k$-NN runs over.
+At autoregressive inference, the $K$ and $V$ projections of past tokens never change once computed, because the projection weights $W_K, W_V$ are fixed, the past tokens are fixed, and causal masking prevents past positions from attending to newly appended tokens. They are cached once and reused for every subsequent generation step. Each new query position recomputes only its own $q, k, v$ and runs one fresh attention lookup against the cached reference set. The memory cost of the cache thus scales linearly with context length.
 
 <figure class="concept-figure">
   <a href="{{ '/assets/images/transformer/kv-cache.png' | relative_url }}">
