@@ -81,7 +81,7 @@ Since $W_Q, W_K, W_V$ are data-invariant, what they encode at training time is t
   <figcaption>The interface comes from the context; the model brings its learned tool-use behavior.</figcaption>
 </figure>
 
-## Test-time compute scaling via layer reuse
+## Test-time scaling via layer reuse (a.k.a looped transformers)
 
 Two earlier framings combine here. The weight/activation split says the per-layer projection weights $W_Q, W_K, W_V$ are data-invariant, so the same attention operation can be applied to whatever activations it sees, including activations that came out of the same operation a moment earlier. The dim-preservation property says the output of a self-attention block sits in the same $\mathbb{R}^{N \times d}$ as the input, so feeding the layer's output back into itself is a type-correct thing to do (i.e. obeys the I/O contract semantics of the operation). In this type-based view, the layer accepts and returns tokens of `Type[Concept]`, so its outputs can be fed back in for further refinement. These are conceptual types; useful refinement still depends on training. Together, the architecture supports running the same layer multiple times against an evolving reference set, deepening the computation at test time without any new parameters.
 
