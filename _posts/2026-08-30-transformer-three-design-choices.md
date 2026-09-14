@@ -20,6 +20,13 @@ $$\mathrm{attn}(q) \approx \texttt{memory}[k_{j^*}], \qquad j^* = \arg\max_j \, 
 
 with the softmax replacing the hard $\arg\max$ by a weighted average. In `memory[key] = value` words, $W_K$ files each token under a key $k_j$, $W_V$ sets the value $v_j$ stored under that key, i.e. the content that gets returned on a match, and $W_Q$ forms the query that a token hands to the memory. The Turing-tape analogy is that the key is the addressing of the tape cells, the value is what the cells contain, and the query is the head's read pattern. The transformer is then a differentiable read on a soft, content-addressable tape.
 
+<figure class="concept-figure">
+  <a href="{{ '/assets/images/transformer/array-vs-attention.png' | relative_url }}">
+    <img src="{{ '/assets/images/transformer/array-vs-attention.png' | relative_url }}" width="640" height="590" loading="lazy" alt="An associative array matches the lookup key k 2 exactly and returns its paired value v 2. Attention compares a query with the keys and returns a softmax-weighted sum of their paired values. Line thickness indicates attention weight.">
+  </a>
+  <figcaption>Both retrieve content associated with keys. An associative array returns the matching entry; attention blends values using query–key similarity.</figcaption>
+</figure>
+
 ### From classical theory of computation
 
 Differentiable content-addressable memory has been a recurring research goal for decades.

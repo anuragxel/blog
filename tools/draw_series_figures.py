@@ -1,4 +1,4 @@
-"""Five additional diagrams for Transformer Parts 1–3, saved as PNGs only.
+"""Additional diagrams for Transformer Parts 1–3, saved as PNGs only.
 
     /usr/bin/python3 tools/draw_series_figures.py
 
@@ -144,6 +144,36 @@ def convex():
     save(s,'attention-convex-hull.png')
 
 
+def array_attention():
+    s = start('An associative array lookup and an attention lookup',
+              'Two aligned flows use paired keys and values. An associative array retrieves v 2 by exact matching k 2. Attention compares query q with all keys and softly combines their paired values into output o. Keys and values are associated entries; the connecting lines do not mean that values are computed from keys.', 590)
+    for offset, soft in [(0, False), (295, True)]:
+        s.append(f'<g transform="translate(0 {offset})">')
+        text(s, 24, 32, 'Attention: soft lookup' if soft else 'Associative array', size=25, anchor='start')
+        for x, label, color in [(67, 'query' if soft else 'lookup key', BLUE),
+                                 (228, 'keys', BLUE), (368, 'values', GREEN),
+                                 (566, 'output' if soft else 'return', GREEN)]:
+            text(s, x, 78, label, color, 20)
+        widths = [1.1, 4, 2.3] if soft else [0, 2.5, 0]
+        for j, (y, sub) in enumerate(zip([117, 175, 233], ['₁', '₂', 'ₙ'])):
+            active = widths[j] > 0
+            color_k, color_v = (BLUE, GREEN) if active else (FAINT, FAINT)
+            if active:
+                path(s, f'M91 175 Q150 {y} 200 {y}', BLUE, widths[j])
+                path(s, f'M395 {y} Q462 {y} 520 175', GREEN, widths[j])
+            box(s, 203, y-19, 50, 38, ['k'+sub], color_k, size=24)
+            path(s, f'M265 {y} H331', FAINT, 1.4, dash=True)
+            box(s, 343, y-19, 50, 38, ['v'+sub], color_v, size=24)
+        arrow(s, 520, 175, 539, 175, GREEN)
+        text(s, 67, 184, 'q' if soft else 'k₂', BLUE, 29)
+        text(s, 566, 184, 'o' if soft else 'v₂', GREEN, 29)
+        text(s, 166, 278, 'similarity → softmax' if soft else 'exact match', BLUE, 19)
+        text(s, 464, 278, 'o = Σⱼ αⱼ vⱼ' if soft else 'memory[k₂] → v₂', GREEN, 22)
+        s.append('</g>')
+    path(s, 'M24 292 H616', '#dedee2', 1)
+    save(s, 'array-vs-attention.png')
+
+
 if __name__ == '__main__':
-    for draw in (bottleneck, self_cross, multihead, tied_scores, convex):
+    for draw in (bottleneck, self_cross, multihead, tied_scores, convex, array_attention):
         draw()
