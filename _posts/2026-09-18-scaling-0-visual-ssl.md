@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Scaling model (pre)-training. Part 1: An opinionated intro. to visual self-supervised learning"
+title: "Scaling model (pre)-training. Part 1: Visual self-supervised learning"
 description: Explaining SimCLR, MAE/SimMIM, and DINO/SimDINO SSL families.
 ---
 
