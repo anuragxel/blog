@@ -6,12 +6,7 @@ description: DP, FSDP, TP, and pipeline parallelism as compositions of familiar 
 
 This is part 2 of a four-part series on scaling up model (pre)-training.
 
-Data parallelism, fully-sharded data parallelism, tensor parallelism, and pipeline parallelism are usually presented as framework features: flags we flip or configs we edit. I think this framing obscures how simple they are. These abstractions were built to address old distributed-systems questions applied to deep learning: *where do the tensors and activations live, and how do you get through a forward and backward pass with the least communication overhead and the highest utilization?* In fact, a systems person who has never done deep learning already knows all four strategies under older names:
-
-- **Data parallelism** is data sharding over replicated state, run in bulk-synchronous Single Program, Multiple Data (SPMD) style {% cite valiant1990bridging %}. The intuition is: to count a country's population we do not ask every household to report to one office. Each district counts its own residents using identical instructions, and the totals are summed at the end. MapReduce {% cite dean2008mapreduce %} is the common example of this pattern.
-- **Fully-sharded data parallelism** is partitioned state with an *owner-computes* rule. Think of bank branches: our home branch owns the ledger and is the only one that applies transactions. Any other branch that needs our balance requests a copy for the moment it needs one, rather than maintaining its own.
-- **Tensor parallelism** is block-partitioned distributed matrix multiplication, which is as old as parallel computing itself: Cannon used it in 1969 to run the Kalman filter on a grid of processors {% cite cannon1969cellular %}, and SUMMA {% cite vandegeijn1997summa %} is another classic algorithm for the same problem.
-- **Pipeline parallelism** is pipelining, the oldest trick in hardware: Ford's assembly line, the five-stage RISC pipeline, systolic arrays. Each station does one stage of the work and hands the piece downstream, and throughput comes from keeping every station busy on a *different* piece at the same time.
+Data parallelism, fully-sharded data parallelism, tensor parallelism, and pipeline parallelism are usually presented as framework features: flags we flip or configs we edit. I think this framing obscures how simple they are. These abstractions were built to address old distributed-systems questions applied to deep learning: *where do the tensors and activations live, and how do you get through a forward and backward pass with the least communication overhead and the highest utilization?*
 
 Most of the communication in these four strategies can be expressed with five collective operations standardized by [MPI](https://en.wikipedia.org/wiki/Message_Passing_Interface) {% cite mpiforum1994 %}. Pipeline parallelism also uses point-to-point communication, which we treat separately. Once these communication patterns are familiar, the strategies become an exercise in arithmetic.
 
@@ -38,15 +33,20 @@ A **collective** is a communication operation in which every process in a group 
 - **Reduce-scatter: combine contributions, then divide the result.** As with all-reduce, the inputs are full arrays that are summed element by element. The result is then partitioned among the devices, with one slice going to its assigned owner. We use equally sized slices in this post.
 - **All-to-all: exchange different pieces with different devices.** The input arrays are split into one block per destination. A destination receives its designated block from all senders. This can rearrange activations from being split by tokens to being split by attention heads.
 
-For a concrete example, suppose device 0 starts with `[1, 2]` and device 1 with `[3, 4]`. All rows below start from those same inputs:
+For a concrete example, the table shows the starting arrays and the result of each operation. All operations start from the first row; they are not run in sequence. Broadcast uses device 0 as the root, both reductions use sums, and all-to-all sends one element per block.
 
-| Operation | Device 0 afterward | Device 1 afterward |
-| --- | --- | --- |
-| Broadcast, with device 0 as root | `[1, 2]` | `[1, 2]` |
+<div class="collectives-table" markdown="1" role="region" aria-label="Collective operations on two devices" tabindex="0">
+
+| Operation / state | Device 0 | Device 1 |
+| :--- | :---: | :---: |
+| **Starting arrays** | `[1, 2]` | `[3, 4]` |
+| Broadcast | `[1, 2]` | `[1, 2]` |
 | All-gather | `[1, 2, 3, 4]` | `[1, 2, 3, 4]` |
 | All-reduce (sum) | `[4, 6]` | `[4, 6]` |
 | Reduce-scatter (sum) | `[4]` | `[6]` |
-| All-to-all, one element per block | `[1, 3]` | `[2, 4]` |
+| All-to-all | `[1, 3]` | `[2, 4]` |
+
+</div>
 
 The all-reduce and reduce-scatter rows reveal a useful identity:
 
