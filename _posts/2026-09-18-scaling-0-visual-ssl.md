@@ -30,9 +30,9 @@ Three design decisions in SimCLR are worth dwelling on:
 
 **Augmentations are the supervision.** The loss says, "Learn a representation that is invariant to the augmentation pipeline." Random crop implies global identity is not sensitive to individual regions or pixels; color jitter implies global identity is not encoded in color statistics. This is the pretext-task guess in a new costume, but stated as an invariance on the latent representation space and not in pixel space, which turns out to be far more robust.
 
-**The projection head is a buffer.** The loss is applied to $z = g(h)$, but the representation we keep is $h = f(x)$, before the head. The contrastive objective demands invariance to augmentation, but the augmentation *could be useful* downstream and the parameters of the head account for it. Nearly every method since has kept some version of this trick.
+**The projection head is a buffer.** The loss is applied to $z = g(h)$, but the representation we keep is $h = f(x)$, before the head. The contrastive objective demands invariance to augmentation, but information about color or orientation can still be useful downstream. Applying the loss after the head lets the backbone retain more of that information. Many later contrastive and self-distillation methods use this separation.
 
-**Negatives stop collapse.** The trivial solution—mapping every image to the same point—is directly penalized. InfoNCE optimizes *alignment* (positives close) plus *uniformity* (embeddings spread uniformly on the hypersphere). Contrastive methods generally have this property: collapse is solved explicitly at the price of needing lots of negatives. Barlow Twins {% cite zbontar2021barlow %} avoids collapse without explicit negatives by pushing the cross-correlation matrix between the two views toward the identity.
+**Negatives stop collapse.** The trivial solution—mapping every image to the same point—is directly penalized. InfoNCE encourages *alignment* (positives close) and *uniformity* (embeddings spread across the hypersphere). Negatives discourage collapse, and SimCLR benefits empirically from having many of them. Barlow Twins {% cite zbontar2021barlow %} avoids collapse without explicit negatives by pushing the cross-correlation matrix between the two views toward the identity.
 
 ## Masked image modeling: MAE and SimMIM
 
@@ -44,11 +44,11 @@ $$\mathcal{L} = \frac{1}{|\mathcal{M}|} \sum_{i \in \mathcal{M}} \lVert \hat{x}_
 
 over the masked set $\mathcal{M}$ only, where $x_i$ is the (per-patch normalized) pixel content of patch $i$. Some points to note:
 
-**The masking ratio matters.** BERT masks 15% of text tokens; MAE masks 75% of patches. Images are spatially redundant: a masked patch can usually be interpolated from its neighbors. Light masking creates a task solvable by low-level texture statistics and reintroduces the danger of proxy mismatch. Aggressive masking makes local interpolation less useful and encourages the encoder to model broader structure. The masking ratio plays the role that negatives played in contrastive methods: it's the knob that makes the task hard enough to require semantics.
+**The masking ratio matters.** BERT masks 15% of text tokens; MAE masks 75% of patches. Images are spatially redundant: a masked patch can usually be interpolated from its neighbors. Light masking creates a task solvable by low-level texture statistics and reintroduces the danger of proxy mismatch. Aggressive masking makes local interpolation less useful and encourages the encoder to model broader structure. The masking ratio controls how much context the model must use: hiding more patches makes local interpolation harder and encourages learning broader structure.
 
 **Asymmetry is the systems win.** MAE's encoder sees *only* the 25% of patches that are visible. A lightweight decoder takes the encoded visible patches plus learned mask tokens (with positional embeddings) and reconstructs the image. Skipping masked tokens in the encoder reduces training FLOPs and produced a 2.8× wall-clock speedup in the paper's default ViT-L comparison; other tested configurations reached 3.5–4.1×. SimMIM instead does the opposite: the full masked sequence goes through the encoder, and the "decoder" is a single linear layer predicting pixels with an $\ell_1$ loss. It is simpler and works with hierarchical backbones like Swin and even convolutional backbones, but it does not get MAE's encoder-side savings from dropping masked tokens. Interpreting both MAE and SimMIM together provides us with a nice picture: *high masking ratio + direct pixel regression* is the core recipe.
 
-**Sidestepping collapse.** As the target is the data itself, the trivial constant solution has enormous loss. However, MAE features can be less linearly separable than those from contrastive methods, even while performing well after end-to-end fine-tuning. Reconstruction demands that the representation retain everything, including color statistics and low-level pixel information that may not be necessary.
+**Sidestepping collapse.** As the target is the data itself, the trivial constant solution has enormous loss. However, MAE features can be less linearly separable than those from contrastive methods, even while performing well after end-to-end fine-tuning. Reconstruction rewards information useful for predicting missing pixels, including low-level detail that may not help a downstream classification task.
 
 ## Self-distillation: DINO
 
@@ -73,11 +73,11 @@ SimDINO {% cite wu2025simplifying %} asks whether many of DINO's collapse-preven
 
 $$R(Z) = \frac{1}{2} \log \det\!\left(I + \frac{d}{n\epsilon^2} Z Z^{T}\right)$$
 
-This measures (up to distortion $\epsilon$) how many bits you'd need to code the batch. Intuitively, it rewards embeddings that spread across different directions. If all normalized embeddings are identical, $ZZ^{T}$ has rank one and $R(Z)$ is lower than it would be for embeddings spread across several directions. Maximizing the rate therefore discourages collapse. SimDINO drops the softmax and cross-entropy entirely, replaces their alignment term with squared Euclidean distance between normalized student and teacher embeddings, and trains with
+This measures how spread out the embeddings are, at a scale set by $\epsilon$. Intuitively, it rewards embeddings that spread across different directions. If all normalized embeddings are identical, $ZZ^{T}$ has rank one and $R(Z)$ is lower than it would be for embeddings spread across several directions. Maximizing the rate therefore discourages collapse. SimDINO drops the softmax and cross-entropy entirely, replaces their alignment term with squared Euclidean distance between normalized student and teacher embeddings, and trains with
 
 $$\mathcal{L}_{\mathrm{SimDINO}} = \mathbb{E}\left[\, \tfrac12\lVert z_s-z_t\rVert_2^2\right] \; - \; \gamma \, R(Z_s)$$
 
-The $\log\det$ term is, in a precise sense, the "spread out" pressure that negatives were providing, computed from $ZZ^T/n$ instead of pairwise comparisons.
+Like negatives in contrastive learning, the $\log\det$ term pushes embeddings to spread out.
 
 # References
 
