@@ -52,7 +52,7 @@ over the masked set $\mathcal{M}$ only, where $x_i$ is the (per-patch normalized
 
 ## Self-distillation: DINO
 
-The third family is strange because, on paper, it feels like it shouldn't work. DINO {% cite caron2021emerging %} casts the self-supervised learning problem as knowledge distillation {% cite hinton2015distilling %} with no pretrained teacher and two asymmetric branches, unlike the symmetric branches in contrastive methods. The teacher is the student's own exponential moving average (EMA); hence, it is *self*-distillation (an idea with roots in Mean Teacher from semi-supervised learning {% cite tarvainen2017mean %}). Both networks output a distribution over $K$ prototypes ($K$ is large in practice), and the student matches the teacher's distribution with a cross-entropy loss:
+The third family is strange because, on paper, it feels like it shouldn't work. DINO {% cite caron2021emerging %} casts the self-supervised learning problem as knowledge distillation {% cite hinton2015distilling %} with no pretrained teacher and two asymmetric branches, unlike the (usual) symmetric branches in contrastive methods. The teacher is the student's own exponential moving average (EMA); hence, it is *self*-distillation (an idea with roots in Mean Teacher from semi-supervised learning {% cite tarvainen2017mean %}). Both networks output a distribution over $K$ prototypes ($K$ is large in practice), and the student matches the teacher's distribution with a cross-entropy loss:
 
 $$P_s(x) = \mathrm{softmax}\!\left(\frac{g_{\theta_s}(x)}{\tau_s}\right), \qquad P_t(x) = \mathrm{softmax}\!\left(\frac{g_{\theta_t}(x) - c}{\tau_t}\right)$$
 

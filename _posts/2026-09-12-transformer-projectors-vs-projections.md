@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "Why won't the transformer die? Part 4: projection weights vs projections"
-description: What about the trillion parameters?
+description: What about the billion parameters?
 ---
 I've spent three posts calling self-attention a somewhat-non-parametric, dim-preserving lookup table with a learned metric. Where, then, do the billions of learned parameters fit into that picture? The right resolution in my view is the distinction between *projections* and *projection weights*, which is also what makes the architecture compositional.
 
@@ -30,7 +30,7 @@ is a fixed form $M = W_Q W_K^{T}$. The metric $M$ is parametric and the same for
 
 The separation enables composition. The attention parts of a stacked transformer can be read as $L$ soft $k$-NN lookups, each with its own learned metric and head structure, each operating on the reference set produced by the layer below. The MLP blocks between attention layers add parametric nonlinearities that the $k$-NN view ignores, and most of the parameter budget is concentrated there rather than the projection weights.
 
-So a trillion-parameter transformer decomposes into:
+So a billion-parameter transformer decomposes into:
 
 1. **Per-head, per-layer projection weights** $W_{Q,h}^{\ell}, W_{K,h}^{\ell}, W_{V,h}^{\ell}$, encoding $hL$ learned metrics and the corresponding value transforms.
 2. **Output projections** $W_O^{\ell}$ that mix per-head outputs back to model dimension at each layer.
@@ -117,9 +117,12 @@ Matching dimensions is one aspect; training must make the encoder's features use
 
 For a complementary software-engineering treatment of transformer interfaces and types, see Nelson Elhage's [*Transformers for software engineers*](https://blog.nelhage.com/post/transformers-for-software-engineers/).
 
-## Refuses to die
+## Concluding Remarks: Refuses to die
 
-The per-layer operation does not care where the reference set comes from, as long as the projection weights and the projections are consistently employed in the "typing sense". When connecting two models, I would check two things separately: do the output and input dimensions match, and has training made those representations useful to the receiving model? The same distinction applies to reusing a block: the loop can be well-defined before its repeated computation is useful. This is what I want the typing picture to help me keep straight.
+The per-layer operation does not care where the reference set comes from, as long as the projection weights and the projections are consistently employed in the "typing sense". In general, the compositional properties of transformers are very exciting, and even the worst parts (the O(N^2) asymptotics) are papered over by system-level advancements like FlashAttention.
+
+In general, research has settled on attention and its variants as the dominant architectures, and they seem unlikely to be displaced anytime soon, but here's to hope and progress in science!
+
 
 # References
 

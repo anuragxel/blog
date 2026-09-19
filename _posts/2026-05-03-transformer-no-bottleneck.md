@@ -54,7 +54,7 @@ Contrast this with a state-space model like Mamba {% cite gu2024mamba %}, whose 
 
 $$h_t = A h_{t-1} + B x_t, \quad y_t = C h_t$$
 
-with hidden state $h_t \in \mathbb{R}^{d_h}$. Every token's contribution must squeeze through this fixed-dim $h_t$ before any later token sees it. Recent DiT work shows a related width bottleneck empirically: training loss has a nonzero lower bound when model width is smaller than token dimension, and drops sharply once the two are matched {% cite zheng2025rae %}.
+with hidden state $h_t \in \mathbb{R}^{d_h}$. Every token's contribution must squeeze through this fixed-dim $h_t$ before any later token sees it.
 
 <figure class="concept-figure">
   <a href="{{ '/assets/images/transformer/token-bottleneck.png' | relative_url }}">
