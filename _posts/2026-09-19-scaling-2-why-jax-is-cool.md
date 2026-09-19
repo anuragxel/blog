@@ -8,15 +8,15 @@ As we saw earlier, distributed model scaling strategies are nothing but placemen
 
 ## The premise: programs as pure functions
 
-JAX {% cite jax2018github %} basically lets us write numerical code as *pure functions* on arrays (and on *pytrees* — arbitrarily nested containers of arrays, which is how model parameters live). In return, we get program transformations as higher-order functions:
+JAX {% cite jax2018github %} lets us write numerical code as *pure functions* on arrays (and on *pytrees* — arbitrarily nested containers of arrays, which is how model parameters live). In return, we get program transformations as higher-order functions:
 
 - `jax.grad(f)` — a new function computing $\nabla f$,
 - `jax.jit(f)` — $f$ traced and compiled, with compiled programs reused for matching input signatures,
 - `jax.vmap(f)` — $f$ mapped over a new batch axis, without writing the batch axis.
 
-Functional purity is necessary for the above statements to be true. I'll not get into the details of why, but feel free to ask your favourite PL theory friends for an explanation. Specifically, `f` has no hidden state: parameters go in as an argument, and new parameters come out as a return value. In most cases, it is alright to think of `f` as a stateless mathematical function.
+Functional purity is what makes the above true. `f` has no hidden state: parameters go in as arguments and anything that changes comes back as a return value. Think of `f` as a mathematical function. Because there are no side effects, tracing `f` once with abstract inputs captures the entire computation, and XLA can optimize the whole program rather than one op at a time.
 
-Due to this purity, the compiler can optimize the program globally. While JAX is a bit harder to read than PyTorch in some aspects, I believe it gets easier once the mental model of this framework is understood (possibly, with some help from a coding agent like Claude or Codex or Gemini).
+JAX has a steeper learning curve than PyTorch, but with the right mental model — pure functions plus transformations — it clicks (possibly with some help from a coding agent).
 
 ## Sharding as placement
 
