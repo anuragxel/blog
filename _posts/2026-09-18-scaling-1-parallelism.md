@@ -33,18 +33,18 @@ A **collective** is a communication operation in which every process in a group 
 - **Reduce-scatter: combine contributions, then divide the result.** As with all-reduce, the inputs are full arrays that are summed element by element. The result is then partitioned among the devices, with one slice going to its assigned owner. We use equally sized slices in this post.
 - **All-to-all: exchange different pieces with different devices.** The input arrays are split into one block per destination. A destination receives its designated block from all senders. This can rearrange activations from being split by tokens to being split by attention heads.
 
-For a concrete example, the table shows the starting arrays and the result of each operation. All operations start from the first row; they are not run in sequence. Broadcast uses device 0 as the root, both reductions use sums, and all-to-all sends one element per block.
+For a concrete example, the table shows the starting arrays and the result of each operation. All operations start from the first row; they are not run in sequence.
 
 <div class="collectives-table" markdown="1" role="region" aria-label="Collective operations on two devices" tabindex="0">
 
 | Operation / state | Device 0 | Device 1 |
 | :--- | :---: | :---: |
 | **Starting arrays** | `[1, 2]` | `[3, 4]` |
-| Broadcast | `[1, 2]` | `[1, 2]` |
+| Broadcast (root: device 0) | `[1, 2]` | `[1, 2]` |
 | All-gather | `[1, 2, 3, 4]` | `[1, 2, 3, 4]` |
 | All-reduce (sum) | `[4, 6]` | `[4, 6]` |
 | Reduce-scatter (sum) | `[4]` | `[6]` |
-| All-to-all | `[1, 3]` | `[2, 4]` |
+| All-to-all (one element per block) | `[1, 3]` | `[2, 4]` |
 
 </div>
 
