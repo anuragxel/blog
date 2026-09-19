@@ -1,0 +1,205 @@
+---
+layout: post
+title: "Scaling model (pre)-training. Part 3: JAX is very cool."
+description: Meshes, shardings and named axes.
+---
+
+As we saw earlier, distributed model scaling strategies are nothing but placements of arrays on devices plus a handful of communication collectives, ranked by memory, compute and communication overheads. This part is about why I think JAX makes the most appropriate substrate for that view: not because it's faster, but because its abstractions make scaling as simple as considering the mesh of devices and the sharding placement, and letting XLA cook. It is thus beautiful to read and write distributed machine learning code in.
+
+## The premise: programs as pure functions
+
+JAX {% cite jax2018github %} basically lets us write numerical code as *pure functions* on arrays (and on *pytrees* — arbitrarily nested containers of arrays, which is how model parameters live). In return, we get program transformations as higher-order functions:
+
+- `jax.grad(f)` — a new function computing $\nabla f$,
+- `jax.jit(f)` — $f$ traced and compiled, with compiled programs reused for matching input signatures,
+- `jax.vmap(f)` — $f$ mapped over a new batch axis, without writing the batch axis.
+
+Functional purity is necessary for the above statements to be true. I'll not get into the details of why, but feel free to ask your favourite PL theory friends for an explanation. Specifically, `f` has no hidden state: parameters go in as an argument, and new parameters come out as a return value. In most cases, it is alright to think of `f` as a stateless mathematical function.
+
+Due to this purity, the compiler can optimize the program globally. While JAX is a bit harder to read than PyTorch in some aspects, I believe it gets easier once the mental model of this framework is understood (possibly, with some help from a coding agent like Claude or Codex or Gemini).
+
+## Sharding as placement
+
+Consider a two-layer MLP we'd like to train. `x` is a batch of input vectors with shape `(batch, width)` and `target` is the target array of the same shape. `params` is a pytree, here a dictionary with two weight matrices: `w_up` has shape `(width, hidden)` and `w_down` has shape `(hidden, width)`. The output has the same shape as `x`.
+
+```python
+import jax
+import numpy as np
+from jax.sharding import AxisType, Mesh, NamedSharding, PartitionSpec as P
+
+
+def mlp(params, x):
+    h = jax.nn.gelu(x @ params["w_up"])
+    return h @ params["w_down"]
+
+
+def loss_fn(params, x, target):
+    return ((mlp(params, x) - target) ** 2).mean()
+```
+
+We will change how these arrays are distributed while keeping the computation fixed.
+
+### Physical connections and logical axes
+
+GPU and TPU systems have communication locality, from devices within a node to nearby nodes or a TPU slice, and then across larger groups or slices. A useful starting point is TP within the fastest local group, DP among nearby groups, and PP across the slower boundaries. This keeps frequent communication close to the devices doing the work.
+
+A **mesh** is a named grid of devices. For our DP, FSDP, and TP configurations, its axes are `replica`, `fsdp`, and `tensor`. Their sizes specify how many devices participate in each form of parallelism.
+
+Consider 32 hosts with 8 devices each. Assuming the device list is grouped by host, we can reshape it into the configuration we want:
+
+```python
+devices_by_host = np.array(jax.devices()).reshape(32, 8)
+configurations = {
+    "dp":      (256, 1, 1),
+    "fsdp":    (1, 256, 1),
+    "dp_tp":   (32, 1, 8),
+    "fsdp_tp": (1, 32, 8),
+    "dp_fsdp": (32, 8, 1),
+}
+mesh = Mesh(
+    devices_by_host.reshape(configurations["dp_fsdp"]),
+    ("replica", "fsdp", "tensor"),
+    axis_types=(AxisType.Auto,) * 3,
+)
+```
+
+Keeping each host's eight devices together lets us place TP or FSDP communication within that host:
+
+<div class="collectives-table" markdown="1" role="region" aria-label="Parallelism configurations and device placement" tabindex="0">
+
+| Configuration | Mesh shape: replica, FSDP, TP | Placement |
+|---|---|---|
+| DP | `(256, 1, 1)` | Replicate the model across all devices. |
+| FSDP-style | `(1, 256, 1)` | Shard weights across all devices. |
+| DP + TP | `(32, 1, 8)` | TP within hosts. DP across hosts. |
+| FSDP-style + TP | `(1, 32, 8)` | TP within hosts. FSDP across hosts. |
+| DP + FSDP-style | `(32, 8, 1)` | FSDP within hosts. DP across hosts. |
+
+</div>
+
+We can similarly group devices by neighbourhood or TPU slice to keep frequent communication on faster connections.
+
+### One computation, different configurations
+
+A `PartitionSpec` specifies which mesh axes split each array dimension. For a matrix, its entries describe the rows and columns. `None` leaves a dimension unsplit. The array is replicated along unused mesh axes.
+
+Finally, `NamedSharding` combines a `PartitionSpec` with the device `Mesh` to determine where the array is stored.
+
+Let's consider the selected `(32, 8, 1)` configuration. Each host keeps a copy of the model, divided among its eight devices. Each device also gets a different part of the batch. We express this by splitting the batch over `replica` and `fsdp`, and the weights over `fsdp`.
+
+The same rules accommodate TP. When `tensor` is larger than one, we divide the hidden neurons among devices. Each device needs the corresponding columns of `w_up` and rows of `w_down`. Here `tensor` has size one, so those dimensions stay whole.
+
+```python
+def placement(spec):
+    return NamedSharding(mesh, spec)
+
+batch_sharding = placement(P(("replica", "fsdp"), None))
+param_shardings = {
+    "w_up": placement(P("fsdp", "tensor")),
+    "w_down": placement(P("tensor", "fsdp")),
+}
+```
+
+Now we compile the original loss and its gradient. We tell `jit` how the inputs are distributed and ask it to return gradients distributed like the weights. JAX works out the communication needed to perform the calculation.
+
+```python
+loss_and_grad = jax.jit(
+    jax.value_and_grad(loss_fn),
+    in_shardings=(param_shardings, batch_sharding, batch_sharding),
+    out_shardings=(placement(P()), param_shardings),
+)
+```
+
+Changing the mesh configuration thus changes the distribution of the same arrays and the XLA compiler decides the execution schedule.
+
+## shard_map, to manually write the collectives
+
+For direct control, `jax.shard_map` lets us write the per-device program and call communication collectives ourselves. Returning to the DP configuration of the same MLP, each device holds the full parameter tree and an equally sized shard of `x` and `target`:
+
+```python
+from functools import partial
+
+# Select the DP arrangement for the per-device program.
+dp_mesh = Mesh(
+    devices_by_host.reshape(configurations["dp"]),
+    ("replica", "fsdp", "tensor"),
+    axis_types=(AxisType.Auto,) * 3,
+)
+
+@partial(
+    jax.shard_map,
+    mesh=dp_mesh,
+    check_vma=False,  # Handle gradient replication with the explicit pmean.
+    in_specs=(P(), P("replica", None), P("replica", None)),
+    out_specs=P(),
+)
+def dp_grads(params, x, target):
+    grads = jax.grad(loss_fn)(params, x, target)
+    return jax.lax.pmean(grads, axis_name="replica")
+```
+
+`loss_fn` now sees the local batch. Because the batch shards are equally sized, averaging their gradients gives the gradient of the global mean loss.
+
+JAX provides the following primitives:
+
+<div class="collectives-table" markdown="1" role="region" aria-label="MPI collective operations and JAX primitives" tabindex="0">
+
+| MPI Primitive | JAX |
+|---|---|
+| all-reduce | `psum` / `pmean` |
+| all-gather | `all_gather` |
+| reduce-scatter | `psum_scatter` |
+| all-to-all | `all_to_all` |
+
+</div>
+
+## Style choices
+
+The rest of this post is about legibility and a style guide for writing clean code that is easy to read. These stylistic choices derive from the same philosophical point: **name the axes**.
+
+### jaxtyping: shapes in signatures
+
+Shape errors are the dominant bug class in array programming, and the worst thing about them is *where* they surface — three functions downstream of the mistake, as an inscrutable broadcast error, or worse, as a silent wrong-answer broadcast. jaxtyping puts the shape contract in the signature:
+
+```python
+from jaxtyping import Array, Float, Int
+
+def attention(
+    q: Float[Array, "n d"],
+    k: Float[Array, "m d"],
+    v: Float[Array, "m dv"],
+) -> Float[Array, "n dv"]:
+    ...
+```
+
+With runtime checking enabled (via jaxtyping and beartype), symbolic dimensions (`"n d"`) unify across arguments within a call. If `q` and `k` disagree on `d`, that's an error *at this function's boundary*. The annotations become enforced documentation. I think of jaxtyping annotations as defining the *interface contract*: the signature states the tensor type and shape semantics.
+
+### einops and einx: named axes in the operations
+
+The same argument about *contract*, applied to function *bodies*. Older primitives like `reshape`/`transpose`/`unsqueeze` are limited: these positional axis indices carry no meaning, and a new reader must re-derive the layout. einops {% cite rogozhnikov2022einops %} replaces the chain with spelled-out axes. For example, the ViT patchify operation can be written as follows:
+
+```python
+from einops import rearrange
+
+patches = rearrange(imgs, "b (h p1) (w p2) c -> b (h w) (p1 p2 c)",
+                    p1=16, p2=16)
+```
+
+einx {% cite fervers2024einx %} generalizes the notation to essentially every array op, providing helpers for dot products, reductions, and indexing, including a bracket syntax marking the axes. As an example, attention scores and a mean over tokens can be written as follows:
+
+```python
+import einx
+
+scores = einx.dot("b q [d], b k [d] -> b q k", queries, keys)
+pooled = einx.mean("b [s] d", tokens)
+```
+
+The bracket in `[d]` says "this axis is contracted"; the bracket in `[s]` says "this axis is reduced."
+
+Another useful style rule: **use consistent names for array dimensions, and make their mapping to device axes explicit**. A batch dimension called `b` in a jaxtyping signature should also be `b` in einops or einx. In our MLP, that dimension is distributed over the mesh axes `replica` and `fsdp`. Array dimensions describe the data while mesh axes describe how devices share it. Keeping that mapping visible makes both the model and its distributed execution easier to read.
+
+In the next post, we'll look over an SSL method based on self-distillation, SimDINO from earlier, and observe the elegance of writing the EMA teacher, the stop-gradient, and the sharded training step in JAX.
+
+# References
+
+{% bibliography --cited %}

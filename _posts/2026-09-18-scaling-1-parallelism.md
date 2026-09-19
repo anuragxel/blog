@@ -82,7 +82,7 @@ ZeRO's key observation {% cite rajbhandari2020zero %} is that no device needs to
 
 Those two exchanges are the collectives introduced above: an **all-gather** reconstructs the layer's parameters, and a **reduce-scatter** sums and repartitions its gradients. Fully-sharded data parallelism (FSDP) performs them layer by layer {% cite zhao2023pytorch %}. Persistent model state falls from roughly $16P$ to $16P/N$. Under the bf16 accounting above, reconstructing each layer separately for forward and backward gives two parameter all-gathers and one gradient reduce-scatter, or about $6P(N-1)/N$ bytes sent per device per step—1.5× DP's volume for the same model and device count. The exchanges can overlap with neighboring layers, although reconstructing a layer is still a synchronization point and temporarily raises peak memory.
 
-In this example, storage per device is a $1/N$ share of the parameters, gradients, and optimizer state. To execute a layer, the devices concatenate their bf16 parameter slices into a temporary full copy on every device. Under the schedule counted above, that copy is discarded after the forward pass and assembled again for backward. The reduce-scatter sums the devices' gradient contributions; dividing by $N$ produces the averaged gradient shards used for local parameter and optimizer updates.
+Under this schedule, the temporary full weights are discarded after forward and gathered again for backward. Dividing the reduce-scattered gradient sums by $N$ gives each device the averaged gradient shard for its local optimizer update.
 
 ## Tensor parallelism: shard the matmul
 

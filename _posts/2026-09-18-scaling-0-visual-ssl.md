@@ -44,7 +44,7 @@ $$\mathcal{L} = \frac{1}{|\mathcal{M}|} \sum_{i \in \mathcal{M}} \lVert \hat{x}_
 
 over the masked set $\mathcal{M}$ only, where $x_i$ is the (per-patch normalized) pixel content of patch $i$. Some points to note:
 
-**The masking ratio matters.** BERT masks 15% of text tokens; MAE masks 75% of patches. Images are spatially redundant: a masked patch can usually be interpolated from its neighbors. Light masking creates a task solvable by low-level texture statistics and reintroduces the danger of proxy mismatch. Aggressive masking makes local interpolation less useful and encourages the encoder to model broader structure. The masking ratio controls how much context the model must use: hiding more patches makes local interpolation harder and encourages learning broader structure.
+**The masking ratio matters.** BERT masks 15% of text tokens; MAE masks 75% of patches. Images are spatially redundant: a masked patch can usually be interpolated from its neighbors. Light masking creates a task solvable by low-level texture statistics and reintroduces the danger of proxy mismatch. Aggressive masking makes local interpolation less useful and encourages the encoder to model broader structure.
 
 **Asymmetry is the systems win.** MAE's encoder sees *only* the 25% of patches that are visible. A lightweight decoder takes the encoded visible patches plus learned mask tokens (with positional embeddings) and reconstructs the image. Skipping masked tokens in the encoder reduces training FLOPs and produced a 2.8× wall-clock speedup in the paper's default ViT-L comparison; other tested configurations reached 3.5–4.1×. SimMIM instead does the opposite: the full masked sequence goes through the encoder, and the "decoder" is a single linear layer predicting pixels with an $\ell_1$ loss. It is simpler and works with hierarchical backbones like Swin and even convolutional backbones, but it does not get MAE's encoder-side savings from dropping masked tokens. Interpreting both MAE and SimMIM together provides us with a nice picture: *high masking ratio + direct pixel regression* is the core recipe.
 
@@ -78,6 +78,8 @@ This measures how spread out the embeddings are, at a scale set by $\epsilon$. I
 $$\mathcal{L}_{\mathrm{SimDINO}} = \mathbb{E}\left[\, \tfrac12\lVert z_s-z_t\rVert_2^2\right] \; - \; \gamma \, R(Z_s)$$
 
 Like negatives in contrastive learning, the $\log\det$ term pushes embeddings to spread out.
+
+Next, we’ll look at how to distribute any type of model training across devices.
 
 # References
 
