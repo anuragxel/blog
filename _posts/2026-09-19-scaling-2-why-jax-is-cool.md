@@ -8,15 +8,15 @@ As we saw earlier, distributed model scaling strategies are nothing but placemen
 
 ## The premise: programs as pure functions
 
-JAX {% cite jax2018github %} lets us write numerical code as *pure functions* on arrays (and on *pytrees* — arbitrarily nested containers of arrays, which is how model parameters live). In return, we get program transformations as higher-order functions:
+JAX {% cite jax2018github %} lets us write numerical code as *pure functions* on arrays (and on *pytrees*, i.e., arbitrarily nested containers of arrays). In return, we get program transformations as higher-order functions:
 
 - `jax.grad(f)` — a new function computing $\nabla f$,
 - `jax.jit(f)` — $f$ traced and compiled, with compiled programs reused for matching input signatures,
 - `jax.vmap(f)` — $f$ mapped over a new batch axis, without writing the batch axis.
 
-Functional purity is what makes the above true. `f` has no hidden state: parameters go in as arguments and anything that changes comes back as a return value. Think of `f` as a mathematical function. Because there are no side effects, tracing `f` once with abstract inputs captures the entire computation, and XLA can optimize the whole program rather than one op at a time.
+Functional purity is what makes the above possible. `f` has no hidden state: parameters go in as arguments and anything that changes comes back as a return value. Think of `f` as a mathematical function. Because there are no side effects, tracing `f` once with abstract inputs captures the entire computation, and XLA can optimize the whole program rather than one op at a time.
 
-JAX has a steeper learning curve than PyTorch, but with the right mental model — pure functions plus transformations — it clicks (possibly with some help from a coding agent).
+While JAX has a steeper learning curve than PyTorch, the mental model of pure functions plus transformations helps untangle the mystery of distributed ML and makes scaling more straightforward. We shall now look at sharding neural networks using this framework.
 
 ## Sharding as placement
 
@@ -87,7 +87,7 @@ Finally, `NamedSharding` combines a `PartitionSpec` with the device `Mesh` to de
 
 Let's consider the selected `(32, 8, 1)` configuration. Each host keeps a copy of the model, divided among its eight devices. Each device also gets a different part of the batch. We express this by splitting the batch over `replica` and `fsdp`, and the weights over `fsdp`.
 
-The same rules accommodate TP. When `tensor` is larger than one, we divide the hidden neurons among devices. Each device needs the corresponding columns of `w_up` and rows of `w_down`. Here `tensor` has size one, so those dimensions stay whole.
+The same rules work for TP. When `tensor` is larger than one, we divide the hidden neurons among devices. Each device needs the corresponding columns of `w_up` and rows of `w_down`. Here `tensor` has size one, so those dimensions stay whole.
 
 ```python
 def placement(spec):
@@ -138,9 +138,7 @@ def dp_grads(params, x, target):
     return jax.lax.pmean(grads, axis_name="replica")
 ```
 
-`loss_fn` now sees the local batch. Because the batch shards are equally sized, averaging their gradients gives the gradient of the global mean loss.
-
-JAX provides the following primitives:
+`loss_fn` sees the local batch. Because the batch shards are equally sized, averaging their gradients gives the gradient of the global mean loss. JAX provides the following low-level primitives for writing the communication collectives:
 
 <div class="collectives-table" markdown="1" role="region" aria-label="MPI collective operations and JAX primitives" tabindex="0">
 
@@ -157,9 +155,9 @@ JAX provides the following primitives:
 
 The rest of this post is about legibility and a style guide for writing clean code that is easy to read. These stylistic choices derive from the same philosophical point: **name the axes**.
 
-### jaxtyping: shapes in signatures
+### jaxtyping: shapes, names and types in signatures
 
-Shape errors are the dominant bug class in array programming, and the worst thing about them is *where* they surface — three functions downstream of the mistake, as an inscrutable broadcast error, or worse, as a silent wrong-answer broadcast. jaxtyping puts the shape contract in the signature:
+Shape mistakes can cause inscrutable reshape or broadcast errors—or, worse, silent broadcasts that produce incorrect results. Often, the programmer then traces the entire forward pass manually to identify the issue. As the forward pass often spans multiple files, debugging is difficult. `jaxtyping` puts the shape contract in the function signature, helping catch input and output shape mismatches at function boundaries when runtime checking is enabled:
 
 ```python
 from jaxtyping import Array, Float, Int
@@ -174,9 +172,11 @@ def attention(
 
 With runtime checking enabled (via jaxtyping and beartype), symbolic dimensions (`"n d"`) unify across arguments within a call. If `q` and `k` disagree on `d`, that's an error *at this function's boundary*. The annotations become enforced documentation. I think of jaxtyping annotations as defining the *interface contract*: the signature states the tensor type and shape semantics.
 
-### einops and einx: named axes in the operations
+### einops and einx: shapes, names and types in operations
 
-The same argument about *contract*, applied to function *bodies*. Older primitives like `reshape`/`transpose`/`unsqueeze` are limited: these positional axis indices carry no meaning, and a new reader must re-derive the layout. einops {% cite rogozhnikov2022einops %} replaces the chain with spelled-out axes. For example, the ViT patchify operation can be written as follows:
+The same idea about *contracts* can be extended to function *bodies*. Older primitives like `reshape`/`transpose`/`unsqueeze` are limited: positional axis indices do not communicate the axes’ semantic roles, and a new reader must re-derive the tensor layout (or annotate the layout in the variable name as `"tensor_BHWC"`). It is thus better to **enforce named-axes contracts while manipulating tensors**.
+
+einops {% cite rogozhnikov2022einops %} instead allows tensor manipulation with spelled-out axes. For example, the ViT patchify operation can be written as follows:
 
 ```python
 from einops import rearrange
@@ -196,9 +196,18 @@ pooled = einx.mean("b [s] d", tokens)
 
 The bracket in `[d]` says "this axis is contracted"; the bracket in `[s]` says "this axis is reduced."
 
-Another useful style rule: **use consistent names for array dimensions, and make their mapping to device axes explicit**. A batch dimension called `b` in a jaxtyping signature should also be `b` in einops or einx. In our MLP, that dimension is distributed over the mesh axes `replica` and `fsdp`. Array dimensions describe the data while mesh axes describe how devices share it. Keeping that mapping visible makes both the model and its distributed execution easier to read.
+We can also combine jaxtyping with einops or einx:
 
-In the next post, we'll look over an SSL method based on self-distillation, SimDINO from earlier, and observe the elegance of writing the EMA teacher, the stop-gradient, and the sharded training step in JAX.
+```python
+import einx
+from jaxtyping import Array, Float, Int
+
+image_1d_tokens: Float[Array, "b n d"] = einx.id("b h w d -> b (h w) d", image_tokens)
+```
+
+Another useful style suggestion: **use consistent names for array dimensions, and make their mapping to device axes explicit**. A batch dimension called `b` in a jaxtyping signature should also be `b` in einops or einx. In our MLP, that dimension is distributed over the mesh axes `replica` and `fsdp`. Array dimensions describe the data while mesh axes describe how devices share it. Keeping that mapping visible makes both the model and its distributed execution easier to read.
+
+In the next post, we'll examine SimDINO, the SSL method based on self-distillation [introduced earlier]({% post_url 2026-09-18-scaling-0-visual-ssl %}#simdino-deleting-the-training-stability-tricks), and observe the elegance of writing the EMA teacher, the stop-gradient, and the sharded training step in JAX.
 
 # References
 

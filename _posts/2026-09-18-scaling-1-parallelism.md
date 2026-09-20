@@ -12,14 +12,14 @@ Most of the communication in these four strategies can be expressed with five co
 
 ## Why shard at all: the memory footprint of training state
 
-Let us start with why we shard in the first place. Consider a model trained with Adam. Following ZeRO's example, but using bf16 instead of fp16, each parameter costs approximately {% cite rajbhandari2020zero %}:
+Let us start with why we shard in the first place. Consider a model trained with Adam. Each parameter costs approximately {% cite rajbhandari2020zero %}:
 
 - 2 bytes — bf16 working copy of the parameter
 - 2 bytes — bf16 gradient
 - 4 bytes — fp32 master copy of the parameter
 - 4 + 4 bytes — fp32 Adam first and second moments
 
-That is **16 bytes per parameter** of *state*, before a single activation is computed. A 7B-parameter model therefore requires about 112 GB of persistent state. Activations are separate and scale roughly with $\text{batch} \times \text{sequence} \times \text{hidden} \times \text{depth}$, subject to checkpointing and implementation details. Smaller per-device batches and gradient checkpointing reduce activation memory; state is usually sharded across devices, although offloading and lower-precision optimizer states are also possible. The parallelism strategies differ in what they shard—data, state, or activations—and when they communicate.
+That is **16 bytes per parameter** of *state*, before a single activation is computed. A 7B-parameter model therefore requires about 112 GB of persistent state. Activations are separate and scale roughly with $\text{batch} \times \text{sequence} \times \text{hidden} \times \text{depth}$, subject to checkpointing and implementation details. Smaller per-device batches and gradient checkpointing reduce activation memory. Although offloading and using lower-precision optimizer states are also possible, state is usually sharded across devices. The parallelism strategies involve deciding which data, state, or activations to shard and accounting for the resulting communication cost.
 
 ## Back to the 80s and 90s: the language of MPI
 
@@ -29,11 +29,11 @@ A **collective** is a communication operation in which every process in a group 
 
 - **Broadcast: copy from one device to everyone.** Choose one process as the source, called the **root**. Its array is copied to every other device. For example, one device can initialize the model's parameters and broadcast them so everyone starts with the same weights.
 - **All-gather: assemble everyone's pieces on every device.** The devices exchange their arrays and concatenate them in rank order. Starting from distributed parameter shards, all devices end up holding the full layer.
-- **All-reduce: combine everyone's contributions and give everyone the result.** The input arrays have the same shape. A *reduction* combines corresponding entries using an operation such as sum or maximum; we use sums here. For gradients, the result contains the total contribution from all devices to every parameter.
+- **All-reduce: combine everyone's contributions and give everyone the result.** The input arrays have the same shape. A *reduction* combines corresponding entries using an operation such as sum or maximum. For gradients, the result contains the total contribution from all devices to every parameter.
 - **Reduce-scatter: combine contributions, then divide the result.** As with all-reduce, the inputs are full arrays that are summed element by element. The result is then partitioned among the devices, with one slice going to its assigned owner. We use equally sized slices in this post.
 - **All-to-all: exchange different pieces with different devices.** The input arrays are split into one block per destination. A destination receives its designated block from all senders. This can rearrange activations from being split by tokens to being split by attention heads.
 
-For a concrete example, the table shows the starting arrays and the result of each operation. All operations start from the first row; they are not run in sequence.
+For a concrete example, the table shows the starting arrays and the result of each operation. All operations start from the first row.
 
 <div class="collectives-table" markdown="1" role="region" aria-label="Collective operations on two devices" tabindex="0">
 
@@ -56,11 +56,11 @@ Reduce-scatter leaves `[4]` on device 0 and `[6]` on device 1. All-gathering tho
 
 ### Understanding the communication cost model through ring all-reduce
 
-The implementation of the collectives determines the communication overhead. Consider a ring all-reduce {% cite thakur2005optimization patarasuk2009bandwidth %} over $N$ devices with an input array of $V$ bytes per device. Arrange the devices in a ring and divide the input array into equal chunks, one per device, of $V/N$ bytes apiece. A reduce-scatter circulates and accumulates the chunks for $N-1$ steps; an all-gather circulates the completed chunks for another $N-1$. Counting bytes sent per device, the volume is
+The implementation of the collectives determines the communication overhead. Consider a ring implementation of all-reduce {% cite thakur2005optimization patarasuk2009bandwidth %} over $N$ devices with an input array of $V$ bytes per device. Arrange the devices in a ring and divide the input array into equal chunks, one per device, of $V/N$ bytes apiece. A reduce-scatter circulates and accumulates the chunks for $N-1$ steps, followed by an all-gather that circulates the completed chunks for another $N-1$. Counting bytes sent per device, the volume is
 
 $$2 \cdot \frac{N-1}{N} V \;\approx\; 2V.$$
 
-The send and receive volumes are equal. On a full-duplex link, sending and receiving can happen simultaneously. The attractive property is that bandwidth cost barely grows with $N$; the price is $2(N-1)$ sequential communication steps.
+On a full-duplex link, sending and receiving chunks can happen simultaneously. The attractive property is that bandwidth cost barely grows with $N$. The price of this strategy is $2(N-1)$ sequential communication steps.
 
 For our 7B-parameter model, bf16 gradients occupy $V=14$ GB, so a large ring sends about 28 GB per device. At an effective 50 GB/s, that is roughly half a second. In practice, gradients are bucketed: a layer's gradients can start communicating as soon as backward produces them, while earlier layers are still computing. The useful question is therefore how much communication remains after overlap, rather than the raw total alone.
 
@@ -110,7 +110,7 @@ Large-scale training composes these along a *device mesh* {% cite narayanan2021e
 
 A common layout uses TP within a node, DP or FSDP across nodes, and pipeline stages when the model or topology requires another dimension.
 
-In the next post I'll describe this composition in JAX. We specify how arrays are divided across the device mesh; JAX and XLA work out and insert the communication needed to execute that computation. In most of the code, we reason about array axes and device placement rather than writing collectives by hand. I recommend the [JAX Scaling Book](https://jax-ml.github.io/scaling-book/), which assumes a decent systems understanding but goes much further toward actually training an LLM at scale, with a lot more of the arithmetic (a.k.a. roofline estimates).
+In the next post I'll describe this composition in JAX. We specify how arrays are divided across the device mesh. Then, JAX and XLA work out and insert the communication needed to execute that computation. In most of the code, we reason about array axes and device placement rather than writing collectives by hand. I recommend the [JAX Scaling Book](https://jax-ml.github.io/scaling-book/), which assumes a decent systems understanding but goes much further toward actually training an LLM at scale, with a lot more of the arithmetic (a.k.a. roofline estimates).
 
 # References
 
