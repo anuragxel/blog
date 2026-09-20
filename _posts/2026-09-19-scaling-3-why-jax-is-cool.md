@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Scaling model (pre)-training. Part 3: JAX is very cool."
+title: "Pretrain a vision model from scratch. Step 3: Use JAX, it is very cool."
 description: Meshes, shardings and named axes.
 ---
 

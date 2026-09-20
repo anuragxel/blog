@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Scaling model (pre)-training. Part 2: Just Learn MPI"
+title: "Pretrain a vision model from scratch. Step 2: Just Learn MPI"
 description: DP, FSDP, TP, and pipeline parallelism as compositions of familiar communication primitives.
 ---
 

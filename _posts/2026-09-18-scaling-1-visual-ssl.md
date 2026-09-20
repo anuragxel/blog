@@ -1,10 +1,10 @@
 ---
 layout: post
-title: "Scaling model (pre)-training. Part 1: Visual self-supervised learning"
+title: "Pretrain a vision model from scratch. Step 1: Learn Visual SSL"
 description: Explaining SimCLR, MAE/SimMIM, and DINO/SimDINO SSL families.
 ---
 
-I'm in the final year of my PhD, and I want to write down some of the things I learned along the way that did not belong in a paper. This series is about the mental models I use to understand pre-training and distributing it across devices.
+I'm in the final year of my PhD, and I want to write down some of the things I learned along the way that did not belong in a paper. This series is about the mental models I use to understand pre-training and distributing it across devices. In my previous [posts](https://anuragxel.github.io/blog/), I argued that transformers as an architecture are unlikely to be replaced anytime soon. Thus, it's important to scale the model across both model and data axis. In this series, I'll discuss how to scale up models from the algorithmic/systems perspective.
 
 This is part 1 of a four-part series on scaling up model (pre-)training. Supervised pretraining on ImageNet was the default recipe for a while: train a classifier on a million labeled images, chop off the head, and fine-tune the backbone on your task. Self-supervised learning (SSL) instead creates a proxy task so that we can train a backbone on a much larger number of images without the million labels by manufacturing the supervision signal from the images themselves.
 
