@@ -4,7 +4,7 @@ title: "Why won't the transformer die? Part 4: projection weights vs projections
 description: What about the billion parameters?
 ---
 
-I've spent three posts calling self-attention a [somewhat-non-parametric]({% post_url 2026-05-03-transformer-soft-knn %}), [dim-preserving]({% post_url 2026-05-03-transformer-no-bottleneck %}) [lookup table with a learned metric]({% post_url 2026-08-30-transformer-three-design-choices %}). Where, then, do the billions of learned parameters fit into that picture? The right resolution in my view is the distinction between *projections* and *projection weights*, which is also what makes the architecture compositional.
+I've spent three posts thinking about self-attention as a lookup that [draws on the current input]({% post_url 2026-05-03-transformer-soft-knn %}), [keeps token dimensions intact]({% post_url 2026-05-03-transformer-no-bottleneck %}), and [uses learned similarities]({% post_url 2026-08-30-transformer-three-design-choices %}). Where, then, do the billions of learned parameters fit into that picture? The right resolution in my view is the distinction between *projections* and *projection weights*, which is also what makes the architecture compositional.
 
 I find this distinction useful when thinking about how we extend a pretrained model. Adding retrieved documents, connecting a vision encoder, and reusing a layer all become easier to reason about once we separate what the model has learned from what we give it at inference time.
 
@@ -101,7 +101,7 @@ There is one caveat here. The MLP block applied between attention layers is also
 
 ## Chaining multimodal models
 
-We can then think about how pretrained models can be chained across modalities: an encoder supplies tokens, a learned adapter maps them to the language model's reference set manifold, and the language model processes the resulting tokens. Consider a vision encoder connected through a linear adapter, as in LLaVA {% cite liu2023visual %}. In our row-vector convention, an image $I$ becomes a sequence of visual features $Z = E_{\mathrm{vision}}(I) \in \mathbb{R}^{N_v \times d_v}$, and the adapter maps these to:
+We can then think about how pretrained models can be chained across modalities: an encoder supplies tokens, a learned adapter maps them to a representation the language model can use, and the language model processes the resulting tokens. Consider a vision encoder connected through a linear adapter, as in LLaVA {% cite liu2023visual %}. In our row-vector convention, an image $I$ becomes a sequence of visual features $Z = E_{\mathrm{vision}}(I) \in \mathbb{R}^{N_v \times d_v}$, and the adapter maps these to:
 
 $$H_v = Z W_A, \qquad W_A \in \mathbb{R}^{d_v \times d}.$$
 
@@ -122,11 +122,11 @@ For a complementary software-engineering treatment of transformer interfaces and
 
 ## Concluding Remarks: Refuses to die
 
-The per-layer operation does not care where the reference set comes from, as long as the projection weights and the projections are consistently employed in the "typing sense". In general, the compositional properties of transformers are very exciting, and even the worst parts (the O(N^2) asymptotics) are papered over by system-level advancements like FlashAttention.
+The per-layer operation does not care where the reference set comes from, as long as the projection weights and the projections are consistently employed in the "typing sense". The compositional properties of transformers are very exciting, and even the worst parts (the O(N^2) asymptotics) are papered over by system-level advancements like FlashAttention.
 
-This is the picture I wanted to build across these four posts. We can ask what information an architecture keeps, how it retrieves from that information, and which parts are learned or provided by the input. I find those questions useful when deciding what to change in a model.
+This is the picture I wanted to build across these four posts. We can ask what information an architecture keeps, how it retrieves from that information, and which parts are learned or provided by the input. Those questions help me decide what to change in a model.
 
-In general, research has settled on attention and its variants as the dominant architectures, and they seem unlikely to be displaced anytime soon, but here's to hope and progress in science!
+Research has settled on attention and its variants as the dominant architectures, and they seem unlikely to be displaced anytime soon, but here's to hope and progress in science!
 
 
 # References

@@ -4,7 +4,7 @@ title: "Why won't the transformer die? Part 3: three design choices"
 description: Why three projection weight matrices, why inner product, why softmax.
 ---
 
-This is part 3 of a four-part series. Parts [1]({% post_url 2026-05-03-transformer-no-bottleneck %}) and [2]({% post_url 2026-05-03-transformer-soft-knn %}) set up the picture of self-attention as a somewhat non-parametric, dim-preserving, K-NN-mimicking lookup table. Calling Q, K, and V "queries, keys, and values" gives me names for the matrices but doesn't provide intuition for why the operation looks the way it does.
+This is part 3 of a four-part series. Parts [1]({% post_url 2026-05-03-transformer-no-bottleneck %}) and [2]({% post_url 2026-05-03-transformer-soft-knn %}) set up a way to think about self-attention: it keeps the token dimensions intact and looks up information among the input tokens using learned similarities. Calling Q, K, and V "queries, keys, and values" gives me names for the matrices but doesn't provide intuition for why the operation looks the way it does.
 
 I also want to know what freedom I lose if I tie two of their weight matrices together, for example. These are the sorts of questions I want to be able to answer before changing an attention layer. This post takes apart each specific choice, in terms of the number of projection weight matrices, the inner product, and softmax.
 
@@ -90,7 +90,7 @@ The third property is a choice and one could have chosen a different inductive b
 
 ## Just won't die
 
-An alternative architecture that also has [dim-preservation properties](https://anuragxel.github.io/blog/transformer-no-bottleneck/) and the [soft-k-NN behavior](https://anuragxel.github.io/blog/transformer-soft-knn/) to emulate a soft lookup has to make three more decisions. We looked through those decisions and came away with a few interesting realizations. Tying up Q and K gives up learned pre-softmax directional asymmetry. The kernel connection motivates inner-product scores without making them necessary. Non-softmax aggregation can change whether the per-head output is a convex combination of the values. This combination may help explain the transformer's versatility across modalities and tasks. If I tie $W_Q = W_K$, there is a tradeoff: fewer parameters, but the learned score can no longer distinguish A looking for B from B looking for A.
+An alternative architecture that also has [dim-preservation properties](https://anuragxel.github.io/blog/transformer-no-bottleneck/) and the [soft-k-NN behavior](https://anuragxel.github.io/blog/transformer-soft-knn/) to emulate a soft lookup has to make three more decisions. The kernel connection motivates inner-product scores without making them necessary. Non-softmax aggregation can change whether the per-head output is a convex combination of the values. This combination may help explain the transformer's versatility across modalities and tasks. If I tie $W_Q = W_K$, there is a tradeoff: fewer parameters, but the learned score can no longer distinguish A looking for B from B looking for A.
 
 There is still one loose end in this picture. If attention behaves like a non-parametric lookup, where do all the learned parameters fit in? In the [last post]({% post_url 2026-09-12-transformer-projectors-vs-projections %}), we'll separate the weights from the activations and look at what that distinction lets us do.
 

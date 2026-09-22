@@ -5,7 +5,7 @@ description: Self-attention through metric learning and kernel methods.
 date: 2026-05-03 12:00:00 -0500
 ---
 
-This is part 2 of a four-part series. [Part 1]({% post_url 2026-05-03-transformer-no-bottleneck %}) argued that the dim-preservation property of self-attention is one reason transformers are hard to displace. This post is about the other half of that picture: the self-attention operation parameterizes a soft $k$-NN-style estimator over a learned metric space.
+This is part 2 of a four-part series. [Part 1]({% post_url 2026-05-03-transformer-no-bottleneck %}) argued that keeping the number of tokens and their dimensions unchanged across transformer blocks is one reason transformers are hard to displace. This post is about how I find it useful to think about the lookup itself: self-attention behaves like soft $k$-NN, with a learned way to measure similarity.
 
 I find this connection useful because it gives us familiar ideas from classical machine learning to reason about attention. It also gives us a way to think about why the same operation is useful for such different inputs, from image patches to text tokens.
 
@@ -50,7 +50,7 @@ which is a Nadaraya-Watson estimator {% cite nadaraya1964estimating watson1964sm
   <figcaption>The same lookup pattern: match references, then retrieve their labels or values. Attention returns a weighted sum of values. Line thickness indicates attention weight.</figcaption>
 </figure>
 
-So the architecture is parameterizing soft $k$-NN regression, but with three distinct differences from classical $k$-NN:
+In this view, the architecture behaves like soft $k$-NN regression, but with three distinct differences from classical $k$-NN:
 
 1. **The metric, via the $Q, K$ projections.** Classical kernel methods commit to a kernel up front (RBF, polynomial, Matern), and the choice encodes a strong prior about what "similar" means. Self-attention learns the similarity from data.
 2. **The label space, via the $V$ projection.** The "labels" attached to each reference point are themselves learned functions of the input. A token's $v_j$ is its "label" for the $k$-NN.

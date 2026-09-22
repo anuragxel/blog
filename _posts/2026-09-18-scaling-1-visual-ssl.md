@@ -85,7 +85,7 @@ Like negatives in contrastive learning, the $\log\det$ term pushes embeddings to
 
 We learned about the various SSL families and their design principles. We saw that mitigating shortcut learning and avoiding representation collapse are two recurring challenges, and the three families address them in different ways. The DINO family has shown particularly strong results at scale, as we've seen with Meta's [DINOv3](https://ai.meta.com/research/dinov3/).
 
-While learning about the nuances of these algorithms is useful and customizing them for a specific use case is important, the difficult part is to learn how to distribute any training job across many devices for scaling up the model size and the dataset size. In the next post, we’ll look at how to distribute any type of model training across devices.
+Understanding and customizing these algorithms is useful, but scaling up the model and dataset brings another challenge: distributing the training job across many devices. In the next post, we’ll look at how to distribute any type of model training across devices.
 
 # References
 
