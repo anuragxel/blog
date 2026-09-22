@@ -87,13 +87,6 @@ A `PartitionSpec` specifies which mesh axes split each array dimension. For a ma
 
 Finally, `NamedSharding` combines a `PartitionSpec` with the device `Mesh` to determine where the array is stored.
 
-<figure class="concept-figure">
-  <a href="{{ '/assets/images/scaling/scaling2-placements.png' | relative_url }}">
-    <img src="{{ '/assets/images/scaling/scaling2-placements.png' | relative_url }}" width="640" height="490" loading="lazy" alt="The same picture on four devices: replication puts the entire picture on each device, while sharding distributes its four quarters across the devices.">
-  </a>
-  <figcaption>Replication copies the array to every device, while sharding divides it among them.</figcaption>
-</figure>
-
 Let's consider the selected `(32, 8, 1)` configuration. Each host keeps a copy of the model, divided among its eight devices. Each device also gets a different part of the batch. We express this by splitting the batch over `replica` and `fsdp`, and the weights over `fsdp`.
 
 The same rules work for TP. When `tensor` is larger than one, we divide the hidden neurons among devices. Each device needs the corresponding columns of `w_up` and rows of `w_down`. Here `tensor` has size one, so those dimensions stay whole.

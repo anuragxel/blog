@@ -49,8 +49,11 @@ def main():
     draw.text(s,29,231,'all-gather',size=20,anchor='start')
     for c in (170,470):
         down(s,c,351,389)
-    draw.text(s,320,375,'free copies',size=21)
-    draw.text(s,320,303,'compute',size=22)
+    draw.text(s,320,367,'keep own',size=18)
+    draw.text(s,320,387,'shard',size=18)
+    draw.text(s,320,285,'materialized',size=15)
+    draw.text(s,320,306,'for forward',size=15)
+    draw.text(s,320,327,'pass',size=15)
     draw.save(s,'scaling1-fsdp.png')
 
 

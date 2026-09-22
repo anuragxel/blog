@@ -1,6 +1,6 @@
 """Draw a pictorial array-placement comparison in the shared thin-ink style.
 
-Run with /usr/bin/python3 tools/draw_scaling3_figures.py.
+Run with /usr/bin/python3 tools/draw_scaling_placements.py.
 Only a 2x PNG is saved. The SVG representation stays in memory.
 """
 
@@ -64,7 +64,7 @@ def placements():
             x = base + col*121
             device(s, x, y)
             picture(s, x+5, y+5, 96, f'copy-{base}-{i}', (row, col) if sharded else None)
-    draw.save(s, 'scaling2-placements.png')
+    draw.save(s, 'scaling1-placements.png')
 
 
 if __name__ == '__main__':

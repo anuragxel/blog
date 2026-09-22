@@ -58,6 +58,7 @@ scholar:
   query: "@*"
 
 exclude:
+  - simdino
   - Gemfile
   - Gemfile.lock
   - vendor

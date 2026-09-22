@@ -106,16 +106,17 @@ def masking():
         encoder(s,290,y+9,54,63)
         arrow(s,354,y+40,401,y+40)
         if label=='MAE':
-            encoder(s,411,y+19,36,44,GREEN)
+            d.text(s,430,y+8,'decoder',GREEN,17)
+            s.append(f'<rect x="403" y="{y+20}" width="54" height="40" rx="4" fill="#e3efdf" stroke="{GREEN}" stroke-width="1.5"/>')
             for j in range(3):
                 s.append(f'<rect x="{366+j*13}" y="{y+83}" width="10" height="10" fill="#f1f1f3" stroke="{FAINT}"/>')
-            arrow(s,404,y+86,426,y+69,FAINT)
+            arrow(s,404,y+86,430,y+61,FAINT)
         else:
-            s.append(f'<rect x="419" y="{y+17}" width="12" height="47" rx="3" fill="white" stroke="{GREEN}" stroke-width="2"/>')
+            d.text(s,430,y+8,'linear head',GREEN,17)
+            s.append(f'<rect x="403" y="{y+32}" width="54" height="16" rx="3" fill="#e3efdf" stroke="{GREEN}" stroke-width="1.5"/>')
         arrow(s,461,y+40,503,y+40,GREEN)
         scene(s,514,y,100,80)
     d.text(s,319,24,'encoder',BLUE,18)
-    d.text(s,430,24,'decoder',GREEN,18)
     save(s,'scaling0-mae-simmim.png')
 
 

@@ -25,6 +25,13 @@ That is **16 bytes per parameter** of *state*, before a single activation is com
 
 Before MPI, systems such as PVM, Intel's NX, Express, and PARMACS offered different interfaces for many of the same communication patterns. The MPI Forum standardized a common interface in 1994 {% cite mpiforum1994 %}. The problems were familiar: distribute some data, assemble pieces held on different machines, or combine results computed independently. These are also the operations we need to train a model across devices.
 
+<figure class="concept-figure">
+  <a href="{{ '/assets/images/scaling/scaling1-placements.png' | relative_url }}">
+    <img src="{{ '/assets/images/scaling/scaling1-placements.png' | relative_url }}" width="640" height="490" loading="lazy" alt="The same picture on four devices: replication puts the entire picture on each device, while sharding distributes its four quarters across the devices.">
+  </a>
+  <figcaption>Replication copies an array to every device, while sharding divides it among them.</figcaption>
+</figure>
+
 A **collective** is a communication operation in which every process in a group participates. For this post, imagine one process per device. Its number within the group is called its **rank**. We will follow the data before and after an operation.
 
 - **Broadcast: copy from one device to everyone.** Choose one process as the source, called the **root**. Its array is copied to every other device. For example, one device can initialize the model's parameters and broadcast them so everyone starts with the same weights.
@@ -88,7 +95,7 @@ Under this schedule, the temporary full weights are discarded after forward and 
   <a href="{{ '/assets/images/scaling/scaling1-fsdp.png' | relative_url }}">
     <img src="{{ '/assets/images/scaling/scaling1-fsdp.png' | relative_url }}" width="640" height="515" loading="lazy" alt="Two device memories start with different colored parameter shards. All-gather temporarily gives both devices the full layer for computation. Freeing the temporary copies leaves the original shards.">
   </a>
-  <figcaption>Keep a shard, briefly assemble the layer, then free the temporary copies.</figcaption>
+  <figcaption>Each device materializes the missing weights for the forward pass, then keeps only its own shard.</figcaption>
 </figure>
 
 ## Tensor parallelism: shard the matmul
@@ -99,7 +106,7 @@ Consider an MLP $Y = \mathrm{GeLU}(XA)B$: $X$ is the input activation matrix, $A
 
 <figure class="concept-figure">
   <a href="{{ '/assets/images/scaling/scaling1-tensor-parallel.png' | relative_url }}">
-    <img src="{{ '/assets/images/scaling/scaling1-tensor-parallel.png' | relative_url }}" width="640" height="530" loading="lazy" alt="A is split into colored columns and B into matching rows. Each device computes GeLU of X times its A slice, then multiplies by its B slice. All-reduce sums the partial outputs into Y, replicated on both devices.">
+    <img src="{{ '/assets/images/scaling/scaling1-tensor-parallel.png' | relative_url }}" width="640" height="565" loading="lazy" alt="Each square is an array element. A is 4 by 6, split into 4 by 3 column slices. B is 6 by 4, split into matching 3 by 4 row slices. On each device, the same 3 by 4 X times its A slice produces a 3 by 3 hidden array after GeLU. Multiplying by its B slice produces a 3 by 4 partial output. All-reduce sums these into the 3 by 4 Y, replicated on both devices.">
   </a>
   <figcaption>Forward pass: matching slices of A and B keep the hidden activation local. All-reduce sums the partial outputs and gives Y to both devices.</figcaption>
 </figure>
@@ -114,9 +121,9 @@ The cost is utilization: stages sit idle while the pipeline fills and drains. GP
 
 <figure class="concept-figure">
   <a href="{{ '/assets/images/scaling/scaling1-pipeline.png' | relative_url }}">
-    <img src="{{ '/assets/images/scaling/scaling1-pipeline.png' | relative_url }}" width="640" height="590" loading="lazy" alt="GPipe schedules on three equal-cost stages. With one microbatch, a forward travels through stages zero to two, then backward returns through stages two to zero over six time slots. Four microbatches stagger forwards and, after all forwards finish, backwards over twelve slots. Gray idle cells occupy two-thirds and one-third of the respective grids.">
+    <img src="{{ '/assets/images/scaling/scaling1-pipeline.png' | relative_url }}" width="640" height="470" loading="lazy" alt="GPipe and 1F1B schedules for four microbatches on three devices, with device names on the left and layer ranges on the right. Numbers 1 through 4 identify microbatches. Hatched blue blocks are forward work, hatched green blocks are backward work, and gray cells are idle. GPipe groups forwards before backwards, while 1F1B alternates them after warmup.">
   </a>
-  <figcaption>F and B are forward and backward work. Numbers identify microbatches. Gray cells are idle. More microbatches shrink the bubble.</figcaption>
+  <figcaption>Numbers track the same four microbatches: GPipe finishes all forwards before starting backwards, while 1F1B alternates forward and backward work after warmup to release saved activations sooner. Both take the same total time here, assuming equal forward and backward costs and no communication overhead.</figcaption>
 </figure>
 
 ## Composition for large-scale training

@@ -1,0 +1,7 @@
+jax==0.6.2
+optax==0.2.5
+einx==0.3.0
+einops==0.8.1
+jaxtyping==0.3.2
+pillow==11.3.0
+numpy==2.2.6
