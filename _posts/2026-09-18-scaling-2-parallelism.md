@@ -6,7 +6,7 @@ description: DP, FSDP, TP, and pipeline parallelism as compositions of familiar 
 
 This is part 2 of a four-part series on scaling up model (pre)-training. We looked at the major families of Visual SSL algorithms, and while they are all fun to implement as toys, the real challenge is scaling up both the model (in terms of its parameters) and the amount of data the model is pre-trained on. Thus, we need to be able to pre-train our model on a huge number of devices at once by employing various parallel and distributed systems techniques for deep learning.
 
-Some of these large-scale pretraining techniques have interesting names: data parallelism, fully sharded data parallelism, tensor parallelism, and pipeline parallelism are usually presented as framework features: flags we flip or configs we edit. I think this framing obscures how simple they are. These abstractions were built to address old distributed-systems questions applied to deep learning: *where do the tensors and activations live, and how do you get through a forward and backward pass with the least communication overhead and the highest utilization?*
+Some of these large-scale pretraining techniques have interesting names: data parallelism, fully sharded data parallelism, tensor parallelism, and pipeline parallelism. These strategies are usually presented as framework features: flags we flip or configs we edit. I think this framing obscures how simple they are. These abstractions were built to address old distributed-systems questions applied to deep learning: *where do the tensors and activations live, and how do you get through a forward and backward pass with the least communication overhead and the highest utilization?*
 
 Most of the communication in these four strategies can be expressed with five collective operations standardized by [MPI](https://en.wikipedia.org/wiki/Message_Passing_Interface) {% cite mpiforum1994 %}. Pipeline parallelism also uses point-to-point communication, which we treat separately. Once these communication patterns are familiar, the strategies become an exercise in arithmetic.
 
@@ -29,7 +29,7 @@ Before MPI, systems such as PVM, Intel's NX, Express, and PARMACS offered differ
   <a href="{{ '/assets/images/scaling/scaling1-placements.png' | relative_url }}">
     <img src="{{ '/assets/images/scaling/scaling1-placements.png' | relative_url }}" width="640" height="490" loading="lazy" alt="The same picture on four devices: replication puts the entire picture on each device, while sharding distributes its four quarters across the devices.">
   </a>
-  <figcaption>Replication copies an array to every device, while sharding divides it among them.</figcaption>
+  <figcaption>With replication, every device stores the same array. With sharding, each device stores a different part of it.</figcaption>
 </figure>
 
 A **collective** is a communication operation in which every process in a group participates. For this post, imagine one process per device. Its number within the group is called its **rank**. We will follow the data before and after an operation.
@@ -59,7 +59,7 @@ The all-reduce and reduce-scatter rows reveal a useful identity:
 
 $$\texttt{all-reduce} \;=\; \texttt{reduce-scatter} \;+\; \texttt{all-gather}$$
 
-Reduce-scatter leaves `[4]` on device 0 and `[6]` on device 1. All-gathering those results gives `[4, 6]` to both devices, exactly the result of all-reduce. This decomposition will be useful when we get to FSDP.
+Reduce-scatter leaves `[4]` on device 0 and `[6]` on device 1. All-gathering those results gives `[4, 6]` to both devices, which is also the result of all-reduce. This decomposition will be useful when we get to FSDP.
 
 ### Understanding the communication cost model through ring all-reduce
 
@@ -85,46 +85,46 @@ A few things to note. First, overlapping makes DP fast in practice: gradients ar
 
 ## FSDP: reschedule the all-reduce
 
+<figure class="concept-figure">
+  <a href="{{ '/assets/images/scaling/scaling1-fsdp.png' | relative_url }}">
+    <img src="{{ '/assets/images/scaling/scaling1-fsdp.png' | relative_url }}" width="640" height="515" loading="lazy" alt="Two device memories start with different colored parameter shards. All-gather temporarily gives both devices the full layer for computation. Freeing the temporary copies leaves the original shards.">
+  </a>
+  <figcaption>Each device gathers the layer’s weights for the forward pass, then keeps only the shard it owns.</figcaption>
+</figure>
+
 ZeRO's key observation {% cite rajbhandari2020zero %} is that no device needs to store and update the whole model. Dividing $P$ parameters across $N$ devices gives each device ownership of $P/N$ parameters and the corresponding gradients and optimizer state. Before a layer runs, its parameter shards are gathered into a temporary full copy on every device. After backward, gradient contributions are summed and partitioned so the owners can update their local parameters.
 
 Those two exchanges are the collectives introduced above: an **all-gather** reconstructs the layer's parameters, and a **reduce-scatter** sums and repartitions its gradients. Fully sharded data parallelism (FSDP) performs them layer by layer {% cite zhao2023pytorch %}. Persistent model state falls from roughly $16P$ to $16P/N$. Under the bf16 accounting above, reconstructing each layer separately for forward and backward gives two parameter all-gathers and one gradient reduce-scatter, or about $6P(N-1)/N$ bytes sent per device per step—1.5× DP's volume for the same model and device count. The exchanges can overlap with neighboring layers, although reconstructing a layer is still a synchronization point and temporarily raises peak memory.
 
 Under this schedule, the temporary full weights are discarded after forward and gathered again for backward. Dividing the reduce-scattered gradient sums by $N$ gives each device the averaged gradient shard for its local optimizer update.
 
-<figure class="concept-figure">
-  <a href="{{ '/assets/images/scaling/scaling1-fsdp.png' | relative_url }}">
-    <img src="{{ '/assets/images/scaling/scaling1-fsdp.png' | relative_url }}" width="640" height="515" loading="lazy" alt="Two device memories start with different colored parameter shards. All-gather temporarily gives both devices the full layer for computation. Freeing the temporary copies leaves the original shards.">
-  </a>
-  <figcaption>Each device materializes the missing weights for the forward pass, then keeps only its own shard.</figcaption>
-</figure>
-
 ## Tensor parallelism: shard the matmul
-
-DP and FSDP divide the batch, but each device still executes the full model for its local microbatch. Tensor parallelism (TP) instead partitions weight matrices so that devices share a layer's FLOPs and intermediate activations {% cite shoeybi2019megatron %}.
-
-Consider an MLP $Y = \mathrm{GeLU}(XA)B$: $X$ is the input activation matrix, $A$ and $B$ are the first and second weight matrices, and $Y$ is the output. The input $X$ is replicated across devices. Splitting $A$ across columns produces separate activation shards, with GeLU applied locally. Splitting $B$ across rows lets those shards feed directly into the second matmul. An all-reduce sums the resulting partial outputs. No device has to materialize the full intermediate activation. Attention follows the same pattern by assigning heads to devices and combining them at the output projection.
 
 <figure class="concept-figure">
   <a href="{{ '/assets/images/scaling/scaling1-tensor-parallel.png' | relative_url }}">
     <img src="{{ '/assets/images/scaling/scaling1-tensor-parallel.png' | relative_url }}" width="640" height="565" loading="lazy" alt="Each square is an array element. A is 4 by 6, split into 4 by 3 column slices. B is 6 by 4, split into matching 3 by 4 row slices. On each device, the same 3 by 4 X times its A slice produces a 3 by 3 hidden array after GeLU. Multiplying by its B slice produces a 3 by 4 partial output. All-reduce sums these into the 3 by 4 Y, replicated on both devices.">
   </a>
-  <figcaption>Forward pass: matching slices of A and B keep the hidden activation local. All-reduce sums the partial outputs and gives Y to both devices.</figcaption>
+  <figcaption>Each device produces a 3 × 4 partial output. All-reduce adds them elementwise, so the final output is also 3 × 4 and is available on both devices.</figcaption>
 </figure>
+
+DP and FSDP divide the batch, but each device still executes the full model for its local microbatch. Tensor parallelism (TP) instead partitions weight matrices so that devices share a layer's FLOPs and intermediate activations {% cite shoeybi2019megatron %}.
+
+Consider an MLP $Y = \mathrm{GeLU}(XA)B$: $X$ is the input activation matrix, $A$ and $B$ are the first and second weight matrices, and $Y$ is the output. The input $X$ is replicated across devices. Splitting $A$ across columns produces separate activation shards, with GeLU applied locally. Splitting $B$ across rows lets those shards feed directly into the second matmul. An all-reduce sums the resulting partial outputs. No device has to materialize the full intermediate activation. Attention follows the same pattern by assigning heads to devices and combining them at the output projection.
 
 These collectives operate on arrays of size $\text{microbatch} \times \text{sequence} \times \text{hidden}$, occur on every layer, and sit on the critical path. TP is therefore usually confined to the fastest interconnect, often within a node.
 
 ## Pipeline parallelism: the assembly line
 
-The fourth strategy shards by *depth*. Split the model into $S$ stages, each owning a consecutive group of layers. Data flows through the stages like an assembly line. Its communication profile is: no collectives are required between stages, only point-to-point handoffs of boundary activations ($\text{microbatch} \times \text{seq} \times \text{hidden}$ elements forward, with a similarly shaped activation gradient backward) between neighboring stages. This is often a low communication volume because each transfer crosses only one boundary, making pipeline parallelism attractive across slower links.
-
-The cost is utilization: stages sit idle while the pipeline fills and drains. GPipe {% cite huang2019gpipe %} addresses this by splitting the batch into $m$ microbatches that flow through the pipeline in a staggered fashion, so that with $S$ balanced stages and negligible communication overhead, the idle "bubble" occupies approximately $\frac{S-1}{m + S - 1}$ of the step.
-
 <figure class="concept-figure">
   <a href="{{ '/assets/images/scaling/scaling1-pipeline.png' | relative_url }}">
     <img src="{{ '/assets/images/scaling/scaling1-pipeline.png' | relative_url }}" width="640" height="470" loading="lazy" alt="GPipe and 1F1B schedules for four microbatches on three devices, with device names on the left and layer ranges on the right. Numbers 1 through 4 identify microbatches. Hatched blue blocks are forward work, hatched green blocks are backward work, and gray cells are idle. GPipe groups forwards before backwards, while 1F1B alternates them after warmup.">
   </a>
-  <figcaption>Numbers track the same four microbatches: GPipe finishes all forwards before starting backwards, while 1F1B alternates forward and backward work after warmup to release saved activations sooner. Both take the same total time here, assuming equal forward and backward costs and no communication overhead.</figcaption>
+  <figcaption>The numbers follow four microbatches through the pipeline. 1F1B alternates forward and backward passes after warmup, allowing it to free saved activations sooner than GPipe.</figcaption>
 </figure>
+
+The fourth strategy shards by *depth*. Split the model into $S$ stages, each owning a consecutive group of layers. Data flows through the stages like an assembly line. Its communication profile is: no collectives are required between stages, only point-to-point handoffs of boundary activations ($\text{microbatch} \times \text{seq} \times \text{hidden}$ elements forward, with a similarly shaped activation gradient backward) between neighboring stages. This is often a low communication volume because each transfer crosses only one boundary, making pipeline parallelism attractive across slower links.
+
+The cost is utilization: stages sit idle while the pipeline fills and drains. GPipe {% cite huang2019gpipe %} addresses this by splitting the batch into $m$ microbatches that flow through the pipeline in a staggered fashion, so that with $S$ balanced stages and negligible communication overhead, the idle "bubble" occupies approximately $\frac{S-1}{m + S - 1}$ of the step.
 
 ## Composition for large-scale training
 

@@ -31,6 +31,13 @@ This is the setup of classical *metric learning* {% cite weinberger2009distance 
 
 Self-attention is a generalization of this setup. In classical metric learning, a bilinear form $\langle x_i, x_j \rangle_M = x_i^{T} M x_j$ with $M$ symmetric PSD defines a Mahalanobis inner product. Attention relaxes both constraints ($M = W_Q W_K^{T}$ is in general neither symmetric nor PSD), keeping only the low-rank structure. The asymmetry is a feature as it lets the score for $i$ attending to $j$ differ from $j$ attending to $i$, which matters once tokens play directional roles.
 
+<figure class="concept-figure">
+  <a href="{{ '/assets/images/transformer/soft-knn.png' | relative_url }}">
+    <img src="{{ '/assets/images/transformer/soft-knn.png' | relative_url }}" width="640" height="580" loading="lazy" alt="Two aligned flows map a k-NN test point, reference set, labels, and prediction to an attention query, keys, values, and output. k-NN selects neighbors. Attention softly weights their values.">
+  </a>
+  <figcaption>Like k-NN, attention uses matches to decide what to return. Here, thicker lines show values that contribute more to the output.</figcaption>
+</figure>
+
 Thus, if we have a learned similarity, exponentiating and row-normalizing gives us the weights
 
 $$\alpha_{ij} = \mathrm{softmax}\!\left( \frac{x_i^{T} M x_j}{\sqrt{d_k}} \right)_j.$$
@@ -42,13 +49,6 @@ The weighted sum of values, $\sum_j \alpha_{ij} v_j$, is a Nadaraya-Watson-style
 - Values $v_j = W_V^{T} x_j$ are reference labels.
 - $\mathrm{softmax}(q_i^{T} k_j / \sqrt{d_k})$ is a soft membership function. Instead of hard top-$k$ selection, you get a probability distribution over neighbors weighted by learned similarity.
 - The output $\sum_j \alpha_{ij} v_j$ is the soft $k$-NN prediction, a weighted average of neighbor labels.
-
-<figure class="concept-figure">
-  <a href="{{ '/assets/images/transformer/soft-knn.png' | relative_url }}">
-    <img src="{{ '/assets/images/transformer/soft-knn.png' | relative_url }}" width="640" height="580" loading="lazy" alt="Two aligned flows map a k-NN test point, reference set, labels, and prediction to an attention query, keys, values, and output. k-NN selects neighbors. Attention softly weights their values.">
-  </a>
-  <figcaption>The same lookup pattern: match references, then retrieve their labels or values. Attention returns a weighted sum of values. Line thickness indicates attention weight.</figcaption>
-</figure>
 
 In this view, the architecture behaves like soft $k$-NN regression, but with three distinct differences from classical $k$-NN:
 
@@ -92,7 +92,7 @@ The heads provide separate channels for different modes of relevance, keeping th
   <a href="{{ '/assets/images/transformer/multi-head-lookups.png' | relative_url }}">
     <img src="{{ '/assets/images/transformer/multi-head-lookups.png' | relative_url }}" width="640" height="350" loading="lazy" alt="The same token branches into two head-specific soft lookups over the context. Their retrieved outputs stay separate, concatenate, and pass through the output projection W O.">
   </a>
-  <figcaption>For the same token, each head retrieves from context X using its own learned similarity and value transform. The similarity need not be a mathematical metric. Concatenation keeps head outputs separate before mixing.</figcaption>
+  <figcaption>Each head learns different matches within the same context. Their outputs are concatenated and then mixed by the output projection.</figcaption>
 </figure>
 
 ## The unreasonable effectiveness of linear and k-NN probes

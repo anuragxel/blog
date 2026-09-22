@@ -17,6 +17,13 @@ I want a way to think through what we keep or give up when we change an architec
 
 ## Self-attention and cross-attention
 
+<figure class="concept-figure">
+  <a href="{{ '/assets/images/transformer/self-vs-cross.png' | relative_url }}">
+    <img src="{{ '/assets/images/transformer/self-vs-cross.png' | relative_url }}" width="640" height="500" loading="lazy" alt="Self-attention obtains Q, K, and V from X. Cross-attention obtains Q from X and K and V from Y. The output has N rows in both cases, matching the queries, even when Y has M rows.">
+  </a>
+  <figcaption>Self-attention and cross-attention both return one output per query, even when the keys and values come from a different sequence.</figcaption>
+</figure>
+
 Let $X \in \mathbb{R}^{N \times d}$ be a set of $N$ tokens, each represented as a $d$-dimensional vector. **Self-attention** projects $X$ into queries, keys, and values via three learned matrices (or projection weights) $W_Q, W_K \in \mathbb{R}^{d \times d_k}$ and $W_V \in \mathbb{R}^{d \times d_v}$:
 
 $$Q = X W_Q, \quad K = X W_K, \quad V = X W_V$$
@@ -37,14 +44,14 @@ $$\mathrm{CrossAttn}(X, Y) = \mathrm{softmax}\!\left( \frac{Q K^{T}}{\sqrt{d_k}}
 
 Each of the $N$ target tokens attends over all $M$ source tokens. Self-attention is the special case $Y = X$ (so $M = N$).
 
-<figure class="concept-figure">
-  <a href="{{ '/assets/images/transformer/self-vs-cross.png' | relative_url }}">
-    <img src="{{ '/assets/images/transformer/self-vs-cross.png' | relative_url }}" width="640" height="500" loading="lazy" alt="Self-attention obtains Q, K, and V from X. Cross-attention obtains Q from X and K and V from Y. The output has N rows in both cases, matching the queries, even when Y has M rows.">
-  </a>
-  <figcaption>Change the source of keys and values. The output still has one row per query.</figcaption>
-</figure>
-
 ## No bottleneck
+
+<figure class="concept-figure">
+  <a href="{{ '/assets/images/transformer/token-bottleneck.png' | relative_url }}">
+    <img src="{{ '/assets/images/transformer/token-bottleneck.png' | relative_url }}" width="640" height="435" loading="lazy" alt="A transformer block keeps an N by d token matrix. A recurrent update combines the current token with a fixed-width previous state to produce another fixed-width state.">
+  </a>
+  <figcaption>A transformer keeps a representation for each token, while a recurrent model carries its history in a fixed-size state.</figcaption>
+</figure>
 
 The biggest question is: why is almost any concept or modality so easy to convert into a transformer?
 
@@ -57,13 +64,6 @@ Contrast this with a state-space model like Mamba {% cite gu2024mamba %}, whose 
 $$h_t = A h_{t-1} + B x_t, \quad y_t = C h_t$$
 
 with hidden state $h_t \in \mathbb{R}^{d_h}$. Every token's contribution must squeeze through this fixed-dim $h_t$ before any later token sees it.
-
-<figure class="concept-figure">
-  <a href="{{ '/assets/images/transformer/token-bottleneck.png' | relative_url }}">
-    <img src="{{ '/assets/images/transformer/token-bottleneck.png' | relative_url }}" width="640" height="435" loading="lazy" alt="A transformer block keeps an N by d token matrix. A recurrent update combines the current token with a fixed-width previous state to produce another fixed-width state.">
-  </a>
-  <figcaption>The transformer retains N addressable token slots. A recurrence carries a fixed-size state. Matching input and output shapes alone does not guarantee information preservation.</figcaption>
-</figure>
 
 ## Non-parametric vs parametric estimation
 

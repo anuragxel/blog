@@ -14,6 +14,13 @@ Why three projections? Why not two (tied $Q = K$) or four? In my view, each of t
 
 ### The connection
 
+<figure class="concept-figure">
+  <a href="{{ '/assets/images/transformer/array-vs-attention.png' | relative_url }}">
+    <img src="{{ '/assets/images/transformer/array-vs-attention.png' | relative_url }}" width="640" height="650" loading="lazy" alt="A memory lookup requests address a 2 and returns its contents v 2. In attention, the query plays the requested-address role, keys play stored-address roles, and values are the stored contents. Attention produces a weighted sum of the values.">
+  </a>
+  <figcaption>We can think of attention as a memory lookup where a query can match several keys and return a weighted average of their values.</figcaption>
+</figure>
+
 One framing is that we need read, write, and address modes to implement a content-addressable memory, and three projections give such an API. To make it concrete, picture an ordinary associative array, where you write `memory[key] = value` and read it back by handing the same key in. A classical lookup needs an exact key match. A *content-addressable* lookup relaxes that to "return the value whose key is most similar to the query" under some chosen similarity. Soft attention is the differentiable version of the same retrieval, returning a weighted average of values where the weight on the $i$-th entry is $\exp(\langle q, k_i \rangle / \sqrt{d_k})$ after row-normalization across the keys {% cite vaswani2017attention %}.
 
 In *self*-attention, input tokens play all three roles via learned projection weights. For a query $q$, a head computes approximately
@@ -21,13 +28,6 @@ In *self*-attention, input tokens play all three roles via learned projection we
 $$\mathrm{attn}(q) \approx \texttt{memory}[k_{j^*}], \qquad j^* = \arg\max_j \, \langle q, k_j \rangle$$
 
 with the softmax replacing the hard $\arg\max$ by a weighted average. In `memory[key] = value` words, $W_K$ files each token under a key $k_j$, $W_V$ sets the value $v_j$ stored under that key, i.e. the content that gets returned on a match, and $W_Q$ forms the query that a token hands to the memory. The Turing-tape analogy is that the key is the addressing of the tape cells, the value is what the cells contain, and the query is the head's read pattern. The transformer is then a differentiable read on a soft, content-addressable tape.
-
-<figure class="concept-figure">
-  <a href="{{ '/assets/images/transformer/array-vs-attention.png' | relative_url }}">
-    <img src="{{ '/assets/images/transformer/array-vs-attention.png' | relative_url }}" width="640" height="650" loading="lazy" alt="A memory lookup requests address a 2 and returns its contents v 2. In attention, the query plays the requested-address role, keys play stored-address roles, and values are the stored contents. Attention produces a weighted sum of the values.">
-  </a>
-  <figcaption>The requested address is the query. Memory addresses are the keys. Memory contents are the values. An exact lookup returns one stored value. Attention returns a weighted sum.</figcaption>
-</figure>
 
 ### From classical theory of computation
 
@@ -40,14 +40,14 @@ Differentiable content-addressable memory has been a recurring research goal for
 
 ### Why not two projection weight matrices?
 
-Tying $Q = K$ forces queries and keys to share a representation, limiting the ability to distinguish what a token searches for from how it is addressed. There is no asymmetry with two projections, because with shared $W_Q = W_K$ the pre-softmax score matrix $X W W^{T} X^{T}$ is symmetric, so token A scores B exactly as B scores A. Without masking or other positional mechanisms, any remaining asymmetry comes from each row's normalization. This learned asymmetry can be useful for causal language modeling, dependency-style relations, and other directional computations. Tied-QK variants exist and work in some settings, but they give up this asymmetry, so three independent projections are the natural choice for an asymmetric, differentiable, content-addressable lookup.
-
 <figure class="concept-figure">
   <a href="{{ '/assets/images/transformer/tied-qk-scores.png' | relative_url }}">
     <img src="{{ '/assets/images/transformer/tied-qk-scores.png' | relative_url }}" width="640" height="340" loading="lazy" alt="With tied query and key weights, the A-to-B and B-to-A entries of the score matrix must match. Separate weights allow those two entries to differ.">
   </a>
-  <figcaption>Tying Q/K weights forces symmetric dot-product scores. This is before softmax, masking, or additional positional terms. Row normalization can still produce asymmetric attention weights.</figcaption>
+  <figcaption>If Q and K share weights, A and B get the same raw dot-product score in both directions. Separate weights let those scores differ.</figcaption>
 </figure>
+
+Tying $Q = K$ forces queries and keys to share a representation, limiting the ability to distinguish what a token searches for from how it is addressed. There is no asymmetry with two projections, because with shared $W_Q = W_K$ the pre-softmax score matrix $X W W^{T} X^{T}$ is symmetric, so token A scores B exactly as B scores A. Without masking or other positional mechanisms, any remaining asymmetry comes from each row's normalization. This learned asymmetry can be useful for causal language modeling, dependency-style relations, and other directional computations. Tied-QK variants exist and work in some settings, but they give up this asymmetry, so three independent projections are the natural choice for an asymmetric, differentiable, content-addressable lookup.
 
 ## Why the inner product?
 
@@ -83,7 +83,7 @@ What does the probability simplex commit us to? Three things that get conflated:
   <a href="{{ '/assets/images/transformer/attention-convex-hull.png' | relative_url }}">
     <img src="{{ '/assets/images/transformer/attention-convex-hull.png' | relative_url }}" width="640" height="325" loading="lazy" alt="Three value vectors form a triangle. Nonnegative attention weights that sum to one place their weighted sum inside the triangle.">
   </a>
-  <figcaption>The softmax-weighted sum lies in the values’ convex hull, before attention dropout, output projection, or residual addition.</figcaption>
+  <figcaption>The weighted average of these three values falls inside their triangle. This is before dropout, the output projection, and the residual connection.</figcaption>
 </figure>
 
 The third property is a choice and one could have chosen a different inductive bias (for example, sigmoid attention).

@@ -70,7 +70,7 @@ Here, $S = X^{T}X$ is called the scatter matrix (or the unnormalized covariance 
   <a href="{{ '/assets/images/pca/projection-reconstruction.png' | relative_url }}">
     <img src="{{ '/assets/images/pca/projection-reconstruction.png' | relative_url }}" width="640" height="380" loading="lazy" alt="Centered points project orthogonally onto the principal direction p. Dashed perpendicular segments connect each point to its reconstruction. Total squared norm splits into projected squared norm and squared reconstruction error.">
   </a>
-  <figcaption>For a unit direction p and fixed centered data, maximizing projected variance is equivalent to minimizing squared perpendicular reconstruction error.</figcaption>
+  <figcaption>Projecting centered data onto this line preserves the most variance and gives the smallest squared reconstruction error.</figcaption>
 </figure>
 
 ### Proof of Equivalence
