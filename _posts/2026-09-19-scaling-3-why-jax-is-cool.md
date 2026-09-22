@@ -41,22 +41,13 @@ def loss_fn(params, x, target):
 
 We will change how these arrays are distributed while keeping the computation fixed.
 
-For the figures, we use a small example: `batch = 8`, `width = 4`, and `hidden = 6`. Each grid cell represents one scalar.
-
-<figure class="concept-figure">
-  <a href="{{ '/assets/images/scaling/scaling3-mlp.png' | relative_url }}">
-    <img src="{{ '/assets/images/scaling/scaling3-mlp.png' | relative_url }}" width="640" height="205" loading="lazy" alt="The global MLP: x, 8 by 4, multiplies w_up, 4 by 6. GeLU gives h, 8 by 6, which multiplies w_down, 6 by 4, to produce y, 8 by 4. Each grid cell represents one scalar.">
-  </a>
-  <figcaption>We will use this MLP for the sharding example. The full array shapes stay the same across configurations.</figcaption>
-</figure>
-
-### Physical connections and logical axes
+### A 256-device example
 
 GPU and TPU systems have communication locality, from devices within a node to nearby nodes or a TPU slice, and then across larger groups or slices. A useful starting point is TP within the fastest local group, DP among nearby groups, and PP across the slower boundaries. This keeps frequent communication close to the devices doing the work.
 
 A **mesh** is a named grid of devices. For our DP, FSDP, and TP configurations, its axes are `replica`, `fsdp`, and `tensor`. Their sizes specify how many devices participate in each form of parallelism.
 
-Consider 32 hosts with 8 devices each. Assuming the device list is grouped by host, we can reshape it into the configuration we want:
+For the code example, consider 32 hosts with 8 devices each. Assuming the device list is grouped by host, we can reshape it into the configuration we want:
 
 ```python
 devices_by_host = np.array(jax.devices()).reshape(32, 8)
@@ -90,7 +81,7 @@ Keeping each host's eight devices together lets us place TP or FSDP communicatio
 
 We can similarly group devices by neighbourhood or TPU slice to keep frequent communication on faster connections.
 
-### One computation, different configurations
+#### Defining the array placements
 
 A `PartitionSpec` specifies which mesh axes split each array dimension. For a matrix, its entries describe the rows and columns. `None` leaves a dimension unsplit. The array is replicated along unused mesh axes.
 
@@ -111,31 +102,6 @@ param_shardings = {
 }
 ```
 
-Keep those partition specs fixed and change only the mesh shape. Below, the same four devices belong to two hosts. The numbers are always in `(replica, fsdp, tensor)` order. U and D denote `w_up` and `w_down`; matching shard labels within a figure mean identical array contents. Each square is one scalar, and each chip contains the arrays stored on one device.
-
-<figure class="concept-figure">
-  <a href="{{ '/assets/images/scaling/scaling3-dp-placement.png' | relative_url }}">
-    <img src="{{ '/assets/images/scaling/scaling3-dp-placement.png' | relative_url }}" width="640" height="660" loading="lazy" alt="DP: mesh (4, 1, 1). The 8 by 4 batch splits into four 2 by 4 pieces, one per device. Each device holds the complete 4 by 6 w_up and 6 by 4 w_down.">
-  </a>
-  <figcaption>With <code>(4, 1, 1)</code>, each device gets a quarter of the batch and a full copy of the weights.</figcaption>
-</figure>
-
-<figure class="concept-figure">
-  <a href="{{ '/assets/images/scaling/scaling3-fsdp-placement.png' | relative_url }}">
-    <img src="{{ '/assets/images/scaling/scaling3-fsdp-placement.png' | relative_url }}" width="640" height="660" loading="lazy" alt="DP plus FSDP: mesh (2, 2, 1). Four different 2 by 4 batch pieces remain. w_up splits by rows into U0 and U1, each 2 by 6. w_down splits by columns into D0 and D1, each 6 by 2. Each host stores both weight pieces across its two devices; matching weight pieces repeat across hosts.">
-  </a>
-  <figcaption>With <code>(2, 2, 1)</code>, each device gets a different quarter of the batch, and the weights are split between the two devices on each host.</figcaption>
-</figure>
-
-<figure class="concept-figure">
-  <a href="{{ '/assets/images/scaling/scaling3-tp-placement.png' | relative_url }}">
-    <img src="{{ '/assets/images/scaling/scaling3-tp-placement.png' | relative_url }}" width="640" height="660" loading="lazy" alt="DP plus TP: mesh (2, 1, 2). The batch splits into two 4 by 4 pieces, with one piece repeated on both devices of each host. w_up splits by columns into two 4 by 3 pieces. w_down splits by rows into two 3 by 4 pieces. Matching weight pieces repeat across hosts.">
-  </a>
-  <figcaption>With <code>(2, 1, 2)</code>, both devices on a host receive the same input. Each computes the activations for three of the six hidden neurons.</figcaption>
-</figure>
-
-The target follows x's placement in every configuration. These pictures show input storage; intermediate placements and the communication needed to compute the MLP are left to the compiler.
-
 Now we compile the original loss and its gradient. We tell `jit` how the inputs are distributed and ask it to return gradients distributed like the weights. JAX works out the communication needed to perform the calculation.
 
 ```python
@@ -148,9 +114,53 @@ loss_and_grad = jax.jit(
 
 Changing the mesh configuration thus changes the distribution of the same arrays, and the XLA compiler decides the execution schedule.
 
+### A four-device walkthrough
+
+We can see the same placement rules in the figures below using two hosts with two devices each. The code above uses 256 devices. Here, DP becomes `(4, 1, 1)`, DP + FSDP becomes `(2, 2, 1)`, and DP + TP becomes `(2, 1, 2)`. The partition specs stay the same.
+
+To draw the arrays, we use `batch = 8`, `width = 4`, and `hidden = 6`. Each grid cell represents one scalar.
+
+<figure class="concept-figure">
+  <a href="{{ '/assets/images/scaling/scaling3-mlp.png' | relative_url }}">
+    <img src="{{ '/assets/images/scaling/scaling3-mlp.png' | relative_url }}" width="640" height="205" loading="lazy" alt="The global MLP: x, 8 by 4, multiplies w_up, 4 by 6. GeLU gives h, 8 by 6, which multiplies w_down, 6 by 4, to produce y, 8 by 4. Each grid cell represents one scalar.">
+  </a>
+  <figcaption>We will use this MLP for the sharding example. The full array shapes stay the same across configurations.</figcaption>
+</figure>
+
+The input and output are both `(8, 4)`, with a hidden activation of shape `(8, 6)`. U and D denote the `(4, 6)` `w_up` and `(6, 4)` `w_down` matrices. Matching shard labels mean identical array contents. Each chip shows the arrays stored on one device.
+
+With DP, `(4, 1, 1)`, each device stores a `(2, 4)` input, the full `(4, 6)` U, and the full `(6, 4)` D.
+
+<figure class="concept-figure">
+  <a href="{{ '/assets/images/scaling/scaling3-dp-placement.png' | relative_url }}">
+    <img src="{{ '/assets/images/scaling/scaling3-dp-placement.png' | relative_url }}" width="640" height="660" loading="lazy" alt="DP: mesh (4, 1, 1). The 8 by 4 batch splits into four 2 by 4 pieces, one per device. Each device holds the complete 4 by 6 w_up and 6 by 4 w_down.">
+  </a>
+  <figcaption>With <code>(4, 1, 1)</code>, each device gets a quarter of the batch and a full copy of the weights.</figcaption>
+</figure>
+
+With DP + FSDP, `(2, 2, 1)`, the input is still split into four `(2, 4)` pieces. Each device stores a `(2, 6)` shard of U and a `(6, 2)` shard of D. Both hosts hold the same pair of weight shards.
+
+<figure class="concept-figure">
+  <a href="{{ '/assets/images/scaling/scaling3-fsdp-placement.png' | relative_url }}">
+    <img src="{{ '/assets/images/scaling/scaling3-fsdp-placement.png' | relative_url }}" width="640" height="660" loading="lazy" alt="DP plus FSDP: mesh (2, 2, 1). Four different 2 by 4 batch pieces remain. w_up splits by rows into U0 and U1, each 2 by 6. w_down splits by columns into D0 and D1, each 6 by 2. Each host stores both weight pieces across its two devices; matching weight pieces repeat across hosts.">
+  </a>
+  <figcaption>With <code>(2, 2, 1)</code>, each device gets a different quarter of the batch, and the weights are split between the two devices on each host.</figcaption>
+</figure>
+
+With DP + TP, `(2, 1, 2)`, both devices on each host receive the same `(4, 4)` input. Each handles three hidden neurons, using a `(4, 3)` shard of U and the matching `(3, 4)` shard of D.
+
+<figure class="concept-figure">
+  <a href="{{ '/assets/images/scaling/scaling3-tp-placement.png' | relative_url }}">
+    <img src="{{ '/assets/images/scaling/scaling3-tp-placement.png' | relative_url }}" width="640" height="660" loading="lazy" alt="DP plus TP: mesh (2, 1, 2). The batch splits into two 4 by 4 pieces, with one piece repeated on both devices of each host. w_up splits by columns into two 4 by 3 pieces. w_down splits by rows into two 3 by 4 pieces. Matching weight pieces repeat across hosts.">
+  </a>
+  <figcaption>With <code>(2, 1, 2)</code>, both devices on a host receive the same input. Each computes the activations for three of the six hidden neurons.</figcaption>
+</figure>
+
+The target follows `x`'s placement in every configuration. These pictures show input storage. Intermediate placements and the communication needed to compute the MLP are left to the compiler.
+
 ## shard_map, to manually write the collectives
 
-For direct control, `jax.shard_map` lets us write the per-device program and call communication collectives ourselves. Returning to the DP configuration of the same MLP, each device holds the full parameter tree and an equally sized shard of `x` and `target`:
+For direct control, `jax.shard_map` lets us write the per-device program and call communication collectives ourselves. Returning to the 256-device code example, we select the `(256, 1, 1)` DP configuration. Each device holds the full parameter tree and one of 256 equal shards of `x` and `target`:
 
 ```python
 from functools import partial
