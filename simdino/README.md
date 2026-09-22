@@ -1,6 +1,6 @@
 # SimDINO as mathematical pseudocode
 
-The core is **224 lines across `model.py` and `train.py`**, including blank lines and comments. It contains a ViT, normalized embedding alignment, coding-rate regularization, and the student/teacher updates. Supporting code has its own files; the line count is not a limit on readable data loading or experiment management.
+The core is in `model.py` and `train.py`. It contains a ViT, normalized embedding alignment, coding-rate regularization, and the student/teacher updates. Data loading and experiment management live in separate files.
 
 ```python
 trainer = Trainer(config)
@@ -10,6 +10,8 @@ state, metrics = step(state, jax.device_put(views, placement))
 ```
 
 `trainer.student` and `trainer.teacher` are separate `ViT` instances. Each model holds architecture configuration, and `apply(weights, images)` receives its weights explicitly. `State` names `student_weights`, `teacher_weights`, `optimizer_state`, and `step`.
+
+`einx` names the axes for normalization, loss statistics, and CLS-token assembly. The forward pass composes image encoding, projection, and normalization. The loss composes cross-view alignment and coding rate. Array notation stays inside the functions that implement those operations. Parameter names and shapes are unchanged, so existing checkpoints still load.
 
 Within `Trainer.step`, only the student weights receive gradients and optimizer updates. The teacher weights receive an EMA update toward the new student weights. The method returns a new state, which makes the same mathematical step usable with replicated or sharded storage.
 

@@ -11,7 +11,12 @@ from data import image_files, load_eval_image
 from model import ViT
 
 
-def features(model, weights, files, batch_size):
+def features(
+    model,
+    weights,
+    files,
+    batch_size,
+):
     infer = jax.jit(lambda parameters, images: model.apply(parameters, images, backbone=True))
     output = []
     for start in range(0, len(files), batch_size):
@@ -20,7 +25,12 @@ def features(model, weights, files, batch_size):
     return np.concatenate(output)
 
 
-def evaluate(run, val_root, train_per_class=16, val_per_class=8):
+def evaluate(
+    run,
+    val_root,
+    train_per_class=16,
+    val_per_class=8,
+):
     metadata = json.loads((run / "config.json").read_text())
     train_root, classes = Path(metadata["data"]), metadata["classes"]
     train_names = sorted(path.name for path in train_root.iterdir() if path.is_dir())

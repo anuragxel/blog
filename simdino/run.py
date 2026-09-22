@@ -16,7 +16,8 @@ from data import epoch_indices, image_files, load_views
 from train import Trainer
 
 
-def parse_args():
+def parse_args(
+):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data", type=Path, required=True)
     parser.add_argument("--out", type=Path, default=Path("runs/simdino"))
@@ -50,7 +51,8 @@ def parse_args():
     return args, config
 
 
-def main():
+def main(
+):
     args, config = parse_args()
     files = image_files(args.data, args.classes, args.per_class)
     if len(files) < config.batch:

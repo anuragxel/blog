@@ -7,6 +7,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
+from einops import rearrange
 from PIL import Image
 from jax.sharding import Mesh
 
@@ -15,11 +16,12 @@ from checkpoint import load, save
 from config import Config
 from data import load_views
 from model import normalize
-from train import Trainer, coding_rate, ema
+from train import Trainer, coding_rate, cross_view_alignment, ema, feature_spread
 
 
 @pytest.fixture(scope="module")
-def example():
+def example(
+):
     config = Config(size=16, patch=8, width=12, depth=1, heads=3,
                     dim=8, batch=4, steps=4, warmup=0)
     trainer = Trainer(config)
@@ -28,13 +30,19 @@ def example():
     return trainer, state, views
 
 
-def close_tree(actual, expected, atol=2e-5):
+def close_tree(
+    actual,
+    expected,
+    atol=2e-5,
+):
     assert jax.tree.structure(actual) == jax.tree.structure(expected)
     for x, y in zip(jax.tree.leaves(actual), jax.tree.leaves(expected)):
         np.testing.assert_allclose(x, y, atol=atol, rtol=1e-4)
 
 
-def test_loss_geometry_and_teacher_boundary(example):
+def test_loss_geometry_and_teacher_boundary(
+    example,
+):
     trainer, state, views = example
     config = trainer.config
     z = trainer.student.apply(state.student_weights, views[0])
@@ -57,8 +65,23 @@ def test_loss_geometry_and_teacher_boundary(example):
     assert not np.isclose(coding_rate(z, config.eps), local)
 
 
+def test_alignment_matches_opposite_crops_of_the_same_image(
+):
+    student = jnp.eye(4).reshape(2, 2, 4)
+    teacher = student[::-1]
+    np.testing.assert_allclose(cross_view_alignment(student, teacher), 0)
+    np.testing.assert_allclose(cross_view_alignment(student, student), 1)
+    np.testing.assert_allclose(cross_view_alignment(student, teacher[:, ::-1]), 1)
+    np.testing.assert_allclose(cross_view_alignment(student, -teacher), 2)
+    collapsed = jnp.ones((2, 3, 4)) / 2
+    np.testing.assert_allclose(feature_spread(collapsed), 0)
+
+
 @pytest.mark.parametrize("mode", ["dp", "fsdp"])
-def test_sharded_loss_gradients_and_updates_match_single_device(example, mode):
+def test_sharded_loss_gradients_and_updates_match_single_device(
+    example,
+    mode,
+):
     if jax.device_count() < 2:
         pytest.skip("Two CPU devices required")
     trainer, state, views = example
@@ -73,7 +96,10 @@ def test_sharded_loss_gradients_and_updates_match_single_device(example, mode):
         assert not sharded.student_weights["embed"].is_fully_replicated
 
 
-def test_ema_checkpoint_and_deterministic_views(example, tmp_path):
+def test_ema_checkpoint_and_deterministic_views(
+    example,
+    tmp_path,
+):
     trainer, state, views = example
     updated, _ = trainer.step(state, views)
     expected_teacher = ema(state.teacher_weights, updated.student_weights, trainer.config.momentum)
@@ -91,13 +117,17 @@ def test_ema_checkpoint_and_deterministic_views(example, tmp_path):
     assert not np.array_equal(a[0], a[1])
 
 
-def test_blog_explicit_collectives_match_global_loss_and_gradients(example):
+def test_blog_explicit_collectives_match_global_loss_and_gradients(
+    example,
+):
     if jax.device_count() < 2:
         pytest.skip("Two CPU devices required")
     trainer, state, views = example
-    post = Path(__file__).resolve().parents[1] / '_drafts/scaling-3-self-distillation.md'
+    post = Path(__file__).resolve().parents[1] / '_drafts/scaling-4-sim-dino.md'
     blocks = re.findall(r"```python\n(.*?)```", post.read_text(), re.S)
-    namespace = dict(vars(train), trainer=trainer, mesh=Mesh(np.array(jax.devices()), ('data',)))
+    mesh = Mesh(np.array(jax.devices()), ('data',))
+    # The committed draft still uses einops for its explicit-collective example.
+    namespace = dict(vars(train), trainer=trainer, mesh=mesh, rearrange=rearrange)
     for block in blocks:
         if block.startswith('def global_rate') or 'def explicit_loss(' in block:
             exec(block, namespace)
@@ -107,7 +137,9 @@ def test_blog_explicit_collectives_match_global_loss_and_gradients(example):
     close_tree(actual, expected)
 
 
-def test_bf16_forward_keeps_loss_statistics_in_fp32(example):
+def test_bf16_forward_keeps_loss_statistics_in_fp32(
+    example,
+):
     from dataclasses import replace
     trainer, _, views = example
     mixed = Trainer(replace(trainer.config, bf16=True))
