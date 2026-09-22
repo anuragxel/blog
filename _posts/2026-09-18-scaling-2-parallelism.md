@@ -110,7 +110,11 @@ Large-scale training composes these along a *device mesh* {% cite narayanan2021e
 
 A common layout uses TP within a node, DP or FSDP across nodes, and pipeline stages when the model or topology requires another dimension.
 
-In the next post, I'll describe this composition in JAX. We specify how arrays are divided across the device mesh. Then, JAX and XLA work out and insert the communication needed to execute that computation. In most of the code, we reason about array axes and device placement rather than writing collectives by hand. I recommend the [JAX Scaling Book](https://jax-ml.github.io/scaling-book/), which assumes a decent systems understanding but goes much further toward actually training an LLM at scale, with a lot more of the arithmetic (a.k.a. roofline estimates).
+### Concluding Remarks
+
+We saw that many of these distributed training strategies are ultimately about sharding and communicating across devices. Choosing between them means weighing memory use, computational demands, and communication overheads. A careful combination of these techniques can help us scale efficiently across devices, depending on the model, batch size, and hardware.
+
+In the next post, I'll describe this composition in JAX. We specify how arrays are divided across the device mesh. Then, JAX and XLA work out and insert the communication needed to execute that computation. In most of the code, we reason about array axes and device placement rather than writing communication collectives by hand. I recommend the [JAX Scaling Book](https://jax-ml.github.io/scaling-book/), which assumes a decent systems understanding but goes much further toward actually training an LLM at scale, with a lot more of the arithmetic (a.k.a. roofline estimates).
 
 # References
 

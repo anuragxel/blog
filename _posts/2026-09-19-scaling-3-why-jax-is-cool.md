@@ -209,6 +209,10 @@ image_1d_tokens: Float[Array, "b n d"] = einx.id("b h w d -> b (h w) d", image_t
 
 Another useful style suggestion: **use consistent names for array dimensions, and make their mapping to device axes explicit**. A batch dimension called `b` in a jaxtyping signature should also be `b` in einops or einx. In our MLP, that dimension is distributed over the mesh axes `replica` and `fsdp`. Array dimensions describe the data while mesh axes describe how devices share it. Keeping that mapping visible makes both the model and its distributed execution easier to read.
 
+### Concluding Remarks
+
+We saw how JAX lets us express distributed training through array placement on a device mesh, with the compiler working out the communication. Naming the axes also makes the model easier to read, from shape annotations to tensor operations. I like this way of writing code because it makes both the computation and where it runs easier to follow.
+
 In the last post, we'll examine SimDINO, the Visual SSL method based on self-distillation [introduced earlier]({% post_url 2026-09-18-scaling-1-visual-ssl %}#simdino-deleting-the-training-stability-tricks), and observe the elegance of writing the EMA teacher, the stop-gradient, and the sharded training step in JAX.
 
 # References
