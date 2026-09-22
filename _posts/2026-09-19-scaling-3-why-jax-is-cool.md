@@ -41,6 +41,15 @@ def loss_fn(params, x, target):
 
 We will change how these arrays are distributed while keeping the computation fixed.
 
+For the figures, use a small example: `batch = 8`, `width = 4`, and `hidden = 6`. Each grid cell represents one scalar.
+
+<figure class="concept-figure">
+  <a href="{{ '/assets/images/scaling/scaling3-mlp.png' | relative_url }}">
+    <img src="{{ '/assets/images/scaling/scaling3-mlp.png' | relative_url }}" width="640" height="205" loading="lazy" alt="The global MLP: x, 8 by 4, multiplies w_up, 4 by 6. GeLU gives h, 8 by 6, which multiplies w_down, 6 by 4, to produce y, 8 by 4. Each grid cell represents one scalar.">
+  </a>
+  <figcaption>The MLP's global shapes stay the same when we distribute its arrays across devices.</figcaption>
+</figure>
+
 ### Physical connections and logical axes
 
 GPU and TPU systems have communication locality, from devices within a node to nearby nodes or a TPU slice, and then across larger groups or slices. A useful starting point is TP within the fastest local group, DP among nearby groups, and PP across the slower boundaries. This keeps frequent communication close to the devices doing the work.
@@ -101,6 +110,31 @@ param_shardings = {
     "w_down": placement(P("tensor", "fsdp")),
 }
 ```
+
+Keep those partition specs fixed and change only the mesh shape. Below, the same four devices belong to two hosts. The numbers are always in `(replica, fsdp, tensor)` order. U and D denote `w_up` and `w_down`; matching shard labels within a figure mean identical array contents. Each square is one scalar, and each chip contains the arrays stored on one device.
+
+<figure class="concept-figure">
+  <a href="{{ '/assets/images/scaling/scaling3-dp-placement.png' | relative_url }}">
+    <img src="{{ '/assets/images/scaling/scaling3-dp-placement.png' | relative_url }}" width="640" height="660" loading="lazy" alt="DP: mesh (4, 1, 1). The 8 by 4 batch splits into four 2 by 4 pieces, one per device. Each device holds the complete 4 by 6 w_up and 6 by 4 w_down.">
+  </a>
+  <figcaption>With <code>(4, 1, 1)</code>, only replica splits the batch. Both weight-sharding axes have size 1, so every device holds the full weights.</figcaption>
+</figure>
+
+<figure class="concept-figure">
+  <a href="{{ '/assets/images/scaling/scaling3-fsdp-placement.png' | relative_url }}">
+    <img src="{{ '/assets/images/scaling/scaling3-fsdp-placement.png' | relative_url }}" width="640" height="660" loading="lazy" alt="DP plus FSDP: mesh (2, 2, 1). Four different 2 by 4 batch pieces remain. w_up splits by rows into U0 and U1, each 2 by 6. w_down splits by columns into D0 and D1, each 6 by 2. Each host stores both weight pieces across its two devices; matching weight pieces repeat across hosts.">
+  </a>
+  <figcaption>With <code>(2, 2, 1)</code>, replica × fsdp still divides the batch four ways. Now fsdp cuts the rows of U and columns of D. The weight shards repeat across replica because neither weight spec uses that axis.</figcaption>
+</figure>
+
+<figure class="concept-figure">
+  <a href="{{ '/assets/images/scaling/scaling3-tp-placement.png' | relative_url }}">
+    <img src="{{ '/assets/images/scaling/scaling3-tp-placement.png' | relative_url }}" width="640" height="660" loading="lazy" alt="DP plus TP: mesh (2, 1, 2). The batch splits into two 4 by 4 pieces, with one piece repeated on both devices of each host. w_up splits by columns into two 4 by 3 pieces. w_down splits by rows into two 3 by 4 pieces. Matching weight pieces repeat across hosts.">
+  </a>
+  <figcaption>With <code>(2, 1, 2)</code>, tensor cuts the columns of U and rows of D: each device owns three hidden neurons. Only replica splits the batch, so both TP devices on a host receive the same 4 × 4 input.</figcaption>
+</figure>
+
+The target follows x's placement in every configuration. These pictures show input storage; intermediate placements and the communication needed to compute the MLP are left to the compiler.
 
 Now we compile the original loss and its gradient. We tell `jit` how the inputs are distributed and ask it to return gradients distributed like the weights. JAX works out the communication needed to perform the calculation.
 
