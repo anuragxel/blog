@@ -1,10 +1,12 @@
 ---
 layout: post
-title: "Pretrain a vision model from scratch. Step 3: Use JAX, it is very cool."
+title: "Pretrain a vision model from scratch. Step 3: Use JAX. It is very cool."
 description: Meshes, shardings and named axes.
 ---
 
-As we saw earlier, distributed model scaling strategies are nothing but placements of arrays on devices plus a handful of communication collectives, ranked by memory, compute and communication overheads. This part is about why I think JAX makes the most appropriate substrate for that view: not because it's faster, but because its abstractions make scaling as simple as considering the mesh of devices and the sharding placement, and letting XLA cook. It is thus beautiful to read and write distributed machine learning code in.
+In the last couple of posts, we discussed the fundamentals of different [Visual SSL families](https://anuragxel.github.io/blog/scaling-1-visual-ssl/) and then we discussed the fundamentals underpinning [distributed model scaling strategies](https://anuragxel.github.io/blog/scaling-2-parallelism/). As we saw earlier, distributed model scaling strategies are nothing but placements of arrays on devices plus a handful of communication collectives, ranked by memory, compute and communication overheads.
+
+This post is about why I think JAX makes the most appropriate substrate for that view: not because it's faster, but because its abstractions make scaling as simple as considering the mesh of devices and the sharding placement, and letting XLA cook. It is thus beautiful to read and write distributed machine learning code in.
 
 ## The premise: programs as pure functions
 
@@ -110,7 +112,7 @@ loss_and_grad = jax.jit(
 )
 ```
 
-Changing the mesh configuration thus changes the distribution of the same arrays and the XLA compiler decides the execution schedule.
+Changing the mesh configuration thus changes the distribution of the same arrays, and the XLA compiler decides the execution schedule.
 
 ## shard_map, to manually write the collectives
 
@@ -194,7 +196,7 @@ scores = einx.dot("b q [d], b k [d] -> b q k", queries, keys)
 pooled = einx.mean("b [s] d", tokens)
 ```
 
-The bracket in `[d]` says "this axis is contracted"; the bracket in `[s]` says "this axis is reduced."
+The bracket in `[d]` says "this axis is contracted." The bracket in `[s]` says "this axis is reduced."
 
 We can also combine jaxtyping with einops or einx:
 
@@ -207,7 +209,7 @@ image_1d_tokens: Float[Array, "b n d"] = einx.id("b h w d -> b (h w) d", image_t
 
 Another useful style suggestion: **use consistent names for array dimensions, and make their mapping to device axes explicit**. A batch dimension called `b` in a jaxtyping signature should also be `b` in einops or einx. In our MLP, that dimension is distributed over the mesh axes `replica` and `fsdp`. Array dimensions describe the data while mesh axes describe how devices share it. Keeping that mapping visible makes both the model and its distributed execution easier to read.
 
-In the next post, we'll examine SimDINO, the SSL method based on self-distillation [introduced earlier]({% post_url 2026-09-18-scaling-1-visual-ssl %}#simdino-deleting-the-training-stability-tricks), and observe the elegance of writing the EMA teacher, the stop-gradient, and the sharded training step in JAX.
+In the last post, we'll examine SimDINO, the Visual SSL method based on self-distillation [introduced earlier]({% post_url 2026-09-18-scaling-1-visual-ssl %}#simdino-deleting-the-training-stability-tricks), and observe the elegance of writing the EMA teacher, the stop-gradient, and the sharded training step in JAX.
 
 # References
 

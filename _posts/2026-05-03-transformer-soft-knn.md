@@ -5,7 +5,9 @@ description: Self-attention through metric learning and kernel methods.
 date: 2026-05-03 12:00:00 -0500
 ---
 
-This is part 2 of a four-part series. Part 1 argued that the dim-preservation property of self-attention is one reason transformers are hard to displace. This post is about the other half of that picture: the self-attention operation parameterizes a soft $k$-NN-style estimator over a learned metric space.
+This is part 2 of a four-part series. [Part 1]({% post_url 2026-05-03-transformer-no-bottleneck %}) argued that the dim-preservation property of self-attention is one reason transformers are hard to displace. This post is about the other half of that picture: the self-attention operation parameterizes a soft $k$-NN-style estimator over a learned metric space.
+
+I find this connection useful because it gives us familiar ideas from classical machine learning to reason about attention. It also gives us a way to think about why the same operation is useful for such different inputs, from image patches to text tokens.
 
 ## Recap
 
@@ -13,11 +15,11 @@ Self-attention on a token set $X \in \mathbb{R}^{N \times d}$ computes
 
 $$\mathrm{SelfAttn}(X) = \mathrm{softmax}\!\left( \frac{Q K^{T}}{\sqrt{d_k}} \right) V$$
 
-with $Q = X W_Q$, $K = X W_K$, $V = X W_V$. Output sits in $\mathbb{R}^{N \times d_v}$, with the same $N$ rows as the input.
+with $Q = X W_Q$, $K = X W_K$, $V = X W_V$. The output sits in $\mathbb{R}^{N \times d_v}$, with the same $N$ rows as the input.
 
 ## Soft k-NN over a learned metric space
 
-The projections $Q, K, V$ are themselves functions of the input, which has very deep connections to metric learning and classical learning literature. I like to think of self-attention as doing soft $k$-NN over a learned kernel/metric space.
+The projections $Q, K, V$ are themselves functions of the input, which has very deep connections to metric learning and the classical learning literature. I like to think of self-attention as doing soft $k$-NN over a learned kernel/metric space.
 
 To see why, look at the score we feed into softmax. For two tokens $x_i, x_j \in \mathbb{R}^d$, the unnormalized similarity expands as
 
@@ -25,11 +27,11 @@ $$\frac{q_i^{T} k_j}{\sqrt{d_k}} = \frac{x_i^{T} W_Q W_K^{T} x_j}{\sqrt{d_k}} = 
 
 where $M = W_Q W_K^{T} \in \mathbb{R}^{d \times d}$ is one learned matrix. The entire $QK^{T}$ is a single bilinear form on the input space. The factorization $M = W_Q W_K^{T}$ buys exactly one thing over learning $M$ directly: with $d_k < d$, it constrains $M$ to rank at most $d_k$.
 
-This is the setup of classical *metric learning* {% cite weinberger2009distance %}. A bilinear form $\langle x_i, x_j \rangle_M = x_i^{T} M x_j$ defines a similarity (an inner product, when $M$ is symmetric positive-semidefinite). Metric learning and its many variants all amount to picking such an $M$ so that semantically similar points score high. Inner product in the raw input space is generally not meaningful but if you have a way to project your inputs to some metric space (which your self-attention operation does), the inner product becomes a useful similarity.
+This is the setup of classical *metric learning* {% cite weinberger2009distance %}. A bilinear form $\langle x_i, x_j \rangle_M = x_i^{T} M x_j$ defines a similarity (an inner product, when $M$ is symmetric positive-semidefinite). Metric learning and its many variants all amount to picking such an $M$ so that semantically similar points score high. The inner product in the raw input space is generally not meaningful, but if you have a way to project your inputs to some metric space (which your self-attention operation does), the inner product becomes a useful similarity.
 
 Self-attention is a generalization of this setup. In classical metric learning, a bilinear form $\langle x_i, x_j \rangle_M = x_i^{T} M x_j$ with $M$ symmetric PSD defines a Mahalanobis inner product. Attention relaxes both constraints ($M = W_Q W_K^{T}$ is in general neither symmetric nor PSD), keeping only the low-rank structure. The asymmetry is a feature as it lets the score for $i$ attending to $j$ differ from $j$ attending to $i$, which matters once tokens play directional roles.
 
-Thus, if we have a learned similarity, exponentiating and row-normalizing gives us,
+Thus, if we have a learned similarity, exponentiating and row-normalizing gives us
 
 $$\mathrm{softmax}\!\left( \frac{x_i^{T} M x_j}{\sqrt{d_k}} \right)_j$$
 
@@ -43,9 +45,9 @@ which is a Nadaraya-Watson estimator {% cite nadaraya1964estimating watson1964sm
 
 <figure class="concept-figure">
   <a href="{{ '/assets/images/transformer/soft-knn.png' | relative_url }}">
-    <img src="{{ '/assets/images/transformer/soft-knn.png' | relative_url }}" width="640" height="580" loading="lazy" alt="Two aligned flows map a k-NN test point, reference set, labels, and prediction to an attention query, keys, values, and output. k-NN selects neighbors; attention softly weights their values.">
+    <img src="{{ '/assets/images/transformer/soft-knn.png' | relative_url }}" width="640" height="580" loading="lazy" alt="Two aligned flows map a k-NN test point, reference set, labels, and prediction to an attention query, keys, values, and output. k-NN selects neighbors. Attention softly weights their values.">
   </a>
-  <figcaption>The same lookup pattern: match references, then retrieve their labels or values. Attention returns a weighted sum of values; line thickness indicates attention weight.</figcaption>
+  <figcaption>The same lookup pattern: match references, then retrieve their labels or values. Attention returns a weighted sum of values. Line thickness indicates attention weight.</figcaption>
 </figure>
 
 So the architecture is parameterizing soft $k$-NN regression, but with three distinct differences from classical $k$-NN:
@@ -70,7 +72,7 @@ where $R^*$ is the Bayes (irreducible) error. A parameter-free rule, $1$-NN, sit
 
 The factor-of-two slack disappears once we let $k$ grow. Stone's theorem {% cite stone1977consistent %} shows that if $k \to \infty$ and $k/n \to 0$ as $n \to \infty$, the $k$-NN classifier is *universally consistent*. Its error converges to the Bayes rate $R^*$ for any data distribution, with no constant factor left over.
 
-The catch is that asymptotic guarantees can coexist with poor finite-sample performance when the metric is unhelpful. With Euclidean distance on raw pixels, the "nearest neighbor" of a cat picture is often a different cat-shaped patch of color and not another cat. Classical $k$-NN binds against a meaningless notion of nearness, and degrades catastrophically in high dimensions, where pairwise distances concentrate and the very notion of a "nearest" point loses its meaning {% cite beyer1999nearest %}. The guarantees are asymptotic; making nearest-neighbor methods useful with finite data depends heavily on the representation.
+The catch is that asymptotic guarantees can coexist with poor finite-sample performance when the metric is unhelpful. With Euclidean distance on raw pixels, the "nearest neighbor" of a cat picture is often a different cat-shaped patch of color and not another cat. Classical $k$-NN binds against a meaningless notion of nearness, and degrades catastrophically in high dimensions, where pairwise distances concentrate and the very notion of a "nearest" point loses its meaning {% cite beyer1999nearest %}. The guarantees are asymptotic. With finite data, getting nearest-neighbor methods to work well depends heavily on the representation.
 
 Self-attention offers a way to address this gap. Training $M = W_Q W_K^{T}$ end-to-end can learn similarities useful for the downstream task. The classical statements do not transfer formally to attention (the reference set is in-context rather than iid, the ``metric'' is learned jointly with the labels, the aggregation is soft rather than top-$k$, and the kernel $\exp(x_i^{T} M x_j / \sqrt{d_k})$ is asymmetric and not Mercer because $M$ is not symmetric), but my conjecture is that self-attention inherits the qualitative behavior of non-parametric $k$-NN: improving predictions as the relevant reference set grows.
 
@@ -99,13 +101,13 @@ Pretraining can be seen as metric learning in this light. Each self-attention la
 
 Consider DINO {% cite caron2021emerging %}, DINOv2 {% cite oquab2024dinov2 %}, or any image/video foundation model. This lens may partly help explain their feature quality, though within-image attention alone does not establish across-image similarity. You train layer-wise soft $k$-NN over each image's tokens, across an astonishingly large collection of images, and the network learns the metric space in which that layer-wise soft $k$-NN works. Both report $k$-NN classification accuracy on frozen features as a flagship evaluation alongside linear probing, on the basis that a well-trained representation should already place same-class examples near each other in the learned space. CLIP {% cite radford2021learning %} works the same way at inference time, scoring an image embedding against a set of text embeddings with cosine similarity, which is the cross-attention score with hard top-1 selection.
 
-That $k$-NN is a hard baseline to beat is not a deep-learning-era observation. Beyond the bounds {% cite cover1967nearest %}, universal consistency results {% cite stone1977consistent %}, the practical folklore has been repeated, including the explicit defense of naive nearest-neighbor classification on image features as competitive {% cite boiman2008defense %}. The same pattern keeps recurring in the deep era: $k$-NN on top of language model representations improves perplexity {% cite khandelwal2020generalization %}, retrieval-augmented generation lifts large LMs {% cite lewis2020retrieval %}.
+That $k$-NN is a hard baseline to beat is not a deep-learning-era observation. Beyond the bounds {% cite cover1967nearest %} and universal consistency results {% cite stone1977consistent %}, the practical folklore has been repeated, including the explicit defense of naive nearest-neighbor classification on image features as competitive {% cite boiman2008defense %}. The same pattern keeps recurring in the deep era: $k$-NN on top of language model representations improves perplexity {% cite khandelwal2020generalization %}, and retrieval-augmented generation lifts large LMs {% cite lewis2020retrieval %}.
 
 ## Still won't die
 
-Learned similarity, learned labels, and a context-shaped reference set may help explain why transformers work across modalities. Architectures that constrain these properties (RNNs and SSMs that compress the reference set into a fixed-size hidden state, MLPs without context-dependent retrieval) may need other mechanisms to recover similar flexibility.
+Learned similarity, learned labels, and a context-shaped reference set may help explain why transformers work across modalities. Architectures that constrain these properties (RNNs and SSMs that compress the reference set into a fixed-size hidden state, MLPs without context-dependent retrieval) may need other mechanisms to recover similar flexibility. The distinction I find useful when changing a model is whether I am changing the learned similarity, the values being retrieved, or the available reference set.
 
-The distinction I find useful when changing a model is whether I am changing the learned similarity, the values being retrieved, or the available reference set. The next post zooms in on the three specific design choices inside this lookup, asking why three projection weight matrices, why the inner product, and why softmax.
+This view still leaves a few choices in the attention formula that I would like to understand. The [next post]({% post_url 2026-08-30-transformer-three-design-choices %}) zooms in on the three specific design choices inside this lookup, asking why we use three projection weight matrices, the inner product, and softmax.
 
 # References
 

@@ -4,9 +4,9 @@ title: "Pretrain a vision model from scratch. Step 2: Just Learn MPI"
 description: DP, FSDP, TP, and pipeline parallelism as compositions of familiar communication primitives.
 ---
 
-This is part 2 of a four-part series on scaling up model (pre)-training.
+This is part 2 of a four-part series on scaling up model (pre)-training. We looked at the major families of Visual SSL algorithms, and while they are all fun to implement as toys, the real challenge is scaling up both the model (in terms of its parameters) and the amount of data the model is pre-trained on. Thus, we need to be able to pre-train our model on a huge number of devices at once by employing various parallel and distributed systems techniques for deep learning.
 
-Data parallelism, fully-sharded data parallelism, tensor parallelism, and pipeline parallelism are usually presented as framework features: flags we flip or configs we edit. I think this framing obscures how simple they are. These abstractions were built to address old distributed-systems questions applied to deep learning: *where do the tensors and activations live, and how do you get through a forward and backward pass with the least communication overhead and the highest utilization?*
+Some of these large-scale pretraining techniques have interesting names: data parallelism, fully sharded data parallelism, tensor parallelism, and pipeline parallelism are usually presented as framework features: flags we flip or configs we edit. I think this framing obscures how simple they are. These abstractions were built to address old distributed-systems questions applied to deep learning: *where do the tensors and activations live, and how do you get through a forward and backward pass with the least communication overhead and the highest utilization?*
 
 Most of the communication in these four strategies can be expressed with five collective operations standardized by [MPI](https://en.wikipedia.org/wiki/Message_Passing_Interface) {% cite mpiforum1994 %}. Pipeline parallelism also uses point-to-point communication, which we treat separately. Once these communication patterns are familiar, the strategies become an exercise in arithmetic.
 
@@ -80,7 +80,7 @@ A few things to note. First, overlapping makes DP fast in practice: gradients ar
 
 ZeRO's key observation {% cite rajbhandari2020zero %} is that no device needs to store and update the whole model. Dividing $P$ parameters across $N$ devices gives each device ownership of $P/N$ parameters and the corresponding gradients and optimizer state. Before a layer runs, its parameter shards are gathered into a temporary full copy on every device. After backward, gradient contributions are summed and partitioned so the owners can update their local parameters.
 
-Those two exchanges are the collectives introduced above: an **all-gather** reconstructs the layer's parameters, and a **reduce-scatter** sums and repartitions its gradients. Fully-sharded data parallelism (FSDP) performs them layer by layer {% cite zhao2023pytorch %}. Persistent model state falls from roughly $16P$ to $16P/N$. Under the bf16 accounting above, reconstructing each layer separately for forward and backward gives two parameter all-gathers and one gradient reduce-scatter, or about $6P(N-1)/N$ bytes sent per device per step—1.5× DP's volume for the same model and device count. The exchanges can overlap with neighboring layers, although reconstructing a layer is still a synchronization point and temporarily raises peak memory.
+Those two exchanges are the collectives introduced above: an **all-gather** reconstructs the layer's parameters, and a **reduce-scatter** sums and repartitions its gradients. Fully sharded data parallelism (FSDP) performs them layer by layer {% cite zhao2023pytorch %}. Persistent model state falls from roughly $16P$ to $16P/N$. Under the bf16 accounting above, reconstructing each layer separately for forward and backward gives two parameter all-gathers and one gradient reduce-scatter, or about $6P(N-1)/N$ bytes sent per device per step—1.5× DP's volume for the same model and device count. The exchanges can overlap with neighboring layers, although reconstructing a layer is still a synchronization point and temporarily raises peak memory.
 
 Under this schedule, the temporary full weights are discarded after forward and gathered again for backward. Dividing the reduce-scattered gradient sums by $N$ gives each device the averaged gradient shard for its local optimizer update.
 
@@ -110,7 +110,7 @@ Large-scale training composes these along a *device mesh* {% cite narayanan2021e
 
 A common layout uses TP within a node, DP or FSDP across nodes, and pipeline stages when the model or topology requires another dimension.
 
-In the next post I'll describe this composition in JAX. We specify how arrays are divided across the device mesh. Then, JAX and XLA work out and insert the communication needed to execute that computation. In most of the code, we reason about array axes and device placement rather than writing collectives by hand. I recommend the [JAX Scaling Book](https://jax-ml.github.io/scaling-book/), which assumes a decent systems understanding but goes much further toward actually training an LLM at scale, with a lot more of the arithmetic (a.k.a. roofline estimates).
+In the next post, I'll describe this composition in JAX. We specify how arrays are divided across the device mesh. Then, JAX and XLA work out and insert the communication needed to execute that computation. In most of the code, we reason about array axes and device placement rather than writing collectives by hand. I recommend the [JAX Scaling Book](https://jax-ml.github.io/scaling-book/), which assumes a decent systems understanding but goes much further toward actually training an LLM at scale, with a lot more of the arithmetic (a.k.a. roofline estimates).
 
 # References
 

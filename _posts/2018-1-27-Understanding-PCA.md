@@ -4,53 +4,53 @@ title: Understanding PCA as an Optimization Problem
 ---
 
 ## Why?
-I’m usually miffed at the whole co-variance maximization to the algorithm hand-waviness that goes on when talking about PCA. Here, we’ll see it purely as an optimization problem and derive the simple algorithm.
+I’m usually miffed at the hand-waviness in explanations of PCA that go from covariance maximization to the algorithm. Here, we’ll see it purely as an optimization problem and derive the simple algorithm.
 
 ## PCA: Problem Statement
-Let’s assume the we have a set of zero centred samples $X = \{x_{1}, x_{2}, .. x_{n}\}^{T}$ all of dimensionality $d$.  We wish to transform these vectors to a lower dimensional space $X^{\prime} = \{ x^{\prime}\_{1}, x^{\prime}\_{2} ,... x^{\prime}\_{n} \}^{T}$ of size say $k$, such that $k \lt\lt d$. We wish to perform this dimensionality reduction using a linear transformation $P$ such that
+Let’s assume that we have a set of zero-centred samples $X = \{x_{1}, x_{2}, .. x_{n}\}^{T}$ all of dimensionality $d$.  We wish to transform these vectors to a lower-dimensional space $X^{\prime} = \{ x^{\prime}\_{1}, x^{\prime}\_{2} ,... x^{\prime}\_{n} \}^{T}$ of size, say, $k$, such that $k \lt\lt d$. We wish to perform this dimensionality reduction using a linear transformation $P$ such that
 
 $$ x^{\prime}_{k \times 1} = P_{k \times d} x_{d \times 1} $$
 
-The subscript denotes the dimensions of the matrices (we’ll drop the subscript ahead for brevity).
+The subscript denotes the dimensions of the matrices (we’ll drop the subscripts below for brevity).
 
 ## Ill-formed problem?
-Given that we chose any arbitrary $P$, we will get a corresponding dimensionality reduction. How do we know which $P$ to chose from the span of all real matrices of size $k \times d$?
+Given that we can choose any arbitrary $P$, we will get a corresponding dimensionality reduction. How do we know which $P$ to choose from the span of all real matrices of size $k \times d$?
 
-The trick is to formulate an optimization problem, so that from the set of all $P$’s, we choose the “best” $P$. As any optimization problem, we need to define an objective function which we would minimize or maximize subject to certain constraints.
+The trick is to formulate an optimization problem, so that from the set of all $P$’s, we choose the “best” $P$. As with any optimization problem, we need to define an objective function which we would minimize or maximize subject to certain constraints.
 
 ## Defining how to get the “best” $P$
 
-There are two ways of defining the optimization problem of PCA, we’ll look at both the ways and then prove their equivalence.
+There are two ways of defining the optimization problem of PCA. We’ll look at both ways and then prove their equivalence.
 
 ### Reconstruction Loss Minimization
 
 Consider how to reconstruct $x$ from its projection. Since $P$ is rectangular ($k \times d$ with $k < d$), it has no true inverse. We require $P$ to have orthonormal rows, so $P P^{T} = I_{k}$, and $P^{T}$ acts as the right pseudoinverse that maps a low-dimensional code back into $\mathbb{R}^{d}$.
 
-For some vector $x$, the projection is $x^{\prime} = Px$. Thus, the reconstructed $x$, let’s call it $\hat{x}$, would be
+For some vector $x$, the projection is $x^{\prime} = Px$. Thus, the reconstructed $x$, which we’ll call $\hat{x}$, would be
 
 $$ \hat{x} = P^{T} x^{\prime}$$
 
 $$ \hat{x} = P^{T} P x$$
 
-It’s now apparent that we wish to minimize the reconstruction loss incurred because of projection and backprojection due to $P$, that is, 
+It’s now apparent that we wish to minimize the reconstruction loss incurred because of projection and backprojection due to $P$, that is,
 
 $$ \mathbf{min} \quad || x − \hat{x} || $$
 
-However, for simplicity, **let’s assume we wish to find just one direction, let’s call it $p$**. We’ll get rid of this assumption later. Also, we will use the whole dataset instead of one sample. Thus, we can formulate an optimization problem as the following,
+However, for simplicity, **let’s assume we wish to find just one direction, which we’ll call $p$**. We’ll get rid of this assumption later. Also, we will use the whole dataset instead of one sample. Thus, we can formulate the following optimization problem:
 
 $$ \mathbf{min} \quad || X - (Xp)p^{T} || $$
 
 $$ s.t. \quad\quad p^{T}p = 1 $$
 
-Convince yourself that this is equivalent to the reconstruction loss mentioned above. Also, the constraint just implies the direction $p$ to be found should be a unit vector. This is because any scaled version of $p$ will also correspond to a solution.
+Convince yourself that this is equivalent to the reconstruction loss mentioned above. Also, the constraint just implies that the direction $p$ to be found should be a unit vector. This is because any scaled version of $p$ will also correspond to a solution.
 
-### Co-Variance Maximization
+### Covariance Maximization
 
-The other way of looking at PCA is to find the best set of directions such that variability of the data is maximized in the lower dimensional space (This is what we usually see).
+The other way of looking at PCA is to find the best set of directions such that the variability of the data is maximized in the lower-dimensional space (this is what we usually see).
 
-Why is this a good idea? Because **the direction with the maximum variance preserves the most information about the data after projection**, in the sense that low-variance directions are nearly constant and contribute little to reconstruction. (Convince yourself by imagining a distribution of students with a variable (say their grade) that never changes; that direction carries no information and dropping it loses nothing.) Note that this is a reconstruction argument, not a class-discriminability one. PCA is unsupervised and does not in general align with class boundaries; that is what LDA is for.
+Why is this a good idea? Because **the direction with the maximum variance preserves the most information about the data after projection**, in the sense that low-variance directions are nearly constant and contribute little to reconstruction. (Convince yourself by imagining a distribution of students with a variable (say their grade) that never changes. That direction carries no information and dropping it loses nothing.) Note that this is a reconstruction argument, not a class-discriminability one. PCA is unsupervised and does not in general align with class boundaries. That’s what LDA is for.
 
-Say $X^{\prime} = Xp$ where $p$ is that direction of maximum variance. Thus, we can write the optimization as,
+Say $X^{\prime} = Xp$ where $p$ is that direction of maximum variance. Thus, we can write the optimization as follows:
 
 $$ \mathbf{max} \quad ||X^{\prime}||^{2} $$
 
@@ -64,7 +64,7 @@ $$ = \mathbf{max} \quad p^{T}X^{T}Xp \quad s.t. \quad p^{T}p = 1 $$
 
 $$ = \mathbf{max} \quad p^{T}Sp \quad s.t. \quad p^{T}p = 1 $$
 
-Here, $S = X^{T}X$ is called the scatter matrix (or the unnormalized covariance matrix). It’s important to remember the data is zero centred and the equation is pretty similar otherwise.
+Here, $S = X^{T}X$ is called the scatter matrix (or the unnormalized covariance matrix). It’s important to remember the data is zero-centred, and the equation is pretty similar otherwise.
 
 <figure class="concept-figure">
   <a href="{{ '/assets/images/pca/projection-reconstruction.png' | relative_url }}">
@@ -101,49 +101,49 @@ $$ = \mathbf{max} \quad p^{T}X^{T}Xp \quad s.t. \quad p^{T}p = 1 $$
 
 $$ = \mathbf{max} \quad p^{T}Sp \quad s.t. \quad p^{T}p = 1 $$
 
-Honestly, I’m much more convinced that the direction we are trying to find has the lowest reconstruction loss rather than looking at it as co-variance maximization problem.
+Honestly, I’m much more convinced by looking for the direction with the lowest reconstruction loss than by looking at it as a covariance maximization problem.
 
 ## Deriving the Algorithm
 
-The beauty of this optimization is that it’s an eigenvector-eigenvalue problem. Let’s see how, let’s start with the second formulation,
+The beauty of this optimization is that it’s an eigenvector-eigenvalue problem. Let’s see how. Let’s start with the second formulation:
 
 $$ \mathbf{max} \quad p^{T}Sp \quad s.t. \quad p^{T}p = 1 $$
 
-Now, using Lagrangian multipliers to convert this constrainted optimization to an unconstrainted optimization problem.
+Now, we use Lagrangian multipliers to convert this constrained optimization problem into an unconstrained optimization problem.
 
 $$ \mathbf{max} \quad p^{T}Sp - \lambda(p^{T}p - 1) $$
 
 We can consider the objective as $L(p,\lambda) = p^{T}Sp - \lambda(p^{T}p - 1)$ and we wish to maximize $L$.
 
-Taking partial with respect to $\lambda$ and setting as zero,
+Taking the partial derivative with respect to $\lambda$ and setting it to zero,
 
 $$ \frac{\partial L}{\partial \lambda} = 0 $$
 
 $$ \Longrightarrow \quad p^{T}p - 1 = 0 $$
 
-Taking partial with respect to $p$ and setting as zero,
+Taking the partial derivative with respect to $p$ and setting it to zero,
 
 $$ \frac{\partial L}{\partial p} = 0 $$
 
 $$ \Longrightarrow \quad 2Sp - 2\lambda p = 0  \quad \Longrightarrow \quad Sp = \lambda p $$
 
-Using both the equation and plugging in $L(p, \lambda)$,
+Using both equations and substituting into $L(p, \lambda)$,
 
 $$ L(p, \lambda) = p^{T}(Sp) - \lambda(p^{T}p - 1) $$
 
 $$ = p^{T}\lambda p - \lambda(1 - 1) = \lambda p^{T}p = \lambda $$
 
-Thus, the optimization reduces to,
+Thus, the optimization reduces to
 
 $$ \mathbf{max} \quad \lambda $$
 
 $$ s.t. \quad Sp = \lambda p $$
 
-which is essentially finding the eigenvector $p$ of scatter matrix $S$ corresponding to the maximum eigenvalue $\lambda$. Now, we can discard our assumption of finding only one direction. To find the $k$ directions, all we need is to find the eigenvectors corresponding to the each of the $k$ eigenvalues sorted in descending order.
+which is essentially finding the eigenvector $p$ of the scatter matrix $S$ corresponding to the maximum eigenvalue $\lambda$. Now, we can discard our assumption of finding only one direction. To find the $k$ directions, all we need is to find the eigenvectors corresponding to each of the $k$ eigenvalues sorted in descending order.
 
 ## PCA: The Algorithm
 
-Thus the algorithm can implemented simply as,
+Thus, the algorithm can be implemented simply as follows:
 
 ```
 def pca(X, k):

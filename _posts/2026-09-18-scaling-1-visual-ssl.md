@@ -4,7 +4,9 @@ title: "Pretrain a vision model from scratch. Step 1: Learn Visual SSL"
 description: Explaining SimCLR, MAE/SimMIM, and DINO/SimDINO SSL families.
 ---
 
-I'm in the final year of my PhD, and I want to write down some of the things I learned along the way that did not belong in a paper. This series is about the mental models I use to understand pre-training and distributing it across devices. In my previous [posts](https://anuragxel.github.io/blog/), I argued that transformers as an architecture are unlikely to be replaced anytime soon. Thus, it's important to scale the model across both model and data axis. In this series, I'll discuss how to scale up models from the algorithmic/systems perspective.
+I'm in the final year of my PhD, and I want to write down some of the things I learned along the way that did not belong in a paper. This series is about the mental models I use to understand pre-training and distributing it across devices.
+
+In my previous [posts](https://anuragxel.github.io/blog/), I argued that transformers as an architecture are unlikely to be replaced anytime soon. Thus, it's important to scale any model across both the model and data axes to improve performance, once we have identified that the close-to-optimal architecture for a given task probably looks like a transformer. In this series, I'll discuss how to scale up models from the algorithmic/systems perspective. While this knowledge is somewhat well-known in LLM land, it's still something of interest to Vision and Robotics folks as we start our own scaling journeys.
 
 This is part 1 of a four-part series on scaling up model (pre-)training. Supervised pretraining on ImageNet was the default recipe for a while: train a classifier on a million labeled images, chop off the head, and fine-tune the backbone on your task. Self-supervised learning (SSL) instead creates a proxy task so that we can train a backbone on a much larger number of images without the million labels by manufacturing the supervision signal from the images themselves.
 
@@ -28,7 +30,7 @@ The loss has the functional form of InfoNCE {% cite oord2018representation %}. U
 
 Three design decisions in SimCLR are worth dwelling on:
 
-**Augmentations are the supervision.** The loss says, "Learn a representation that is invariant to the augmentation pipeline." Random crop implies global identity is not sensitive to individual regions or pixels; color jitter implies global identity is not encoded in color statistics. This is the pretext-task guess in a new costume, but stated as an invariance on the latent representation space and not in pixel space, which turns out to be far more robust.
+**Augmentations are the supervision.** The loss says, "Learn a representation that is invariant to the augmentation pipeline." Random crop implies global identity is not sensitive to individual regions or pixels. Color jitter implies global identity is not encoded in color statistics. This is the pretext-task guess in a new costume, but stated as an invariance on the latent representation space and not in pixel space, which turns out to be far more robust.
 
 **The projection head is a buffer.** The loss is applied to $z = g(h)$, but the representation we keep is $h = f(x)$, before the head. The contrastive objective demands invariance to augmentation, but information about color or orientation can still be useful downstream. Applying the loss after the head lets the backbone retain more of that information. Many later contrastive and self-distillation methods use this separation.
 
@@ -44,15 +46,15 @@ $$\mathcal{L} = \frac{1}{|\mathcal{M}|} \sum_{i \in \mathcal{M}} \lVert \hat{x}_
 
 over the masked set $\mathcal{M}$ only, where $x_i$ is the (per-patch normalized) pixel content of patch $i$. Some points to note:
 
-**The masking ratio matters.** BERT masks 15% of text tokens; MAE masks 75% of patches. Images are spatially redundant: a masked patch can usually be interpolated from its neighbors. Light masking creates a task solvable by low-level texture statistics and reintroduces the danger of proxy mismatch. Aggressive masking makes local interpolation less useful and encourages the encoder to model broader structure.
+**The masking ratio matters.** BERT masks 15% of text tokens. MAE masks 75% of patches. Images are spatially redundant: a masked patch can usually be interpolated from its neighbors. Light masking creates a task solvable by low-level texture statistics and reintroduces the danger of proxy mismatch. Aggressive masking makes local interpolation less useful and encourages the encoder to model broader structure.
 
-**Asymmetry is the systems win.** MAE's encoder sees *only* the patches that are visible. A lightweight decoder takes the encoded visible patches plus learned mask tokens (with positional embeddings) and reconstructs the image. Skipping masked tokens in the encoder reduces training FLOPs and produced approximately 2x to 4× wall-clock speedup. SimMIM instead does the opposite: the full masked sequence goes through the encoder, and the "decoder" is a single linear layer predicting pixels with an $\ell_1$ loss. It is simpler and works with hierarchical backbones like Swin and even convolutional backbones, but it does not get MAE's encoder-side savings from dropping masked tokens. Interpreting both MAE and SimMIM together provides us with a nice picture: *high masking ratio + direct pixel regression* is the core recipe.
+**Asymmetry is the systems win.** MAE's encoder sees *only* the patches that are visible. A lightweight decoder takes the encoded visible patches plus learned mask tokens (with positional embeddings) and reconstructs the image. Skipping masked tokens in the encoder reduces training FLOPs and produced an approximately 2× to 4× wall-clock speedup. SimMIM instead does the opposite: the full masked sequence goes through the encoder, and the "decoder" is a single linear layer predicting pixels with an $\ell_1$ loss. It is simpler and works with hierarchical backbones like Swin and even convolutional backbones, but it does not get MAE's encoder-side savings from dropping masked tokens. Interpreting both MAE and SimMIM together provides us with a nice picture: *high masking ratio + direct pixel regression* is the core recipe.
 
 **Sidestepping collapse.** As the target is the data itself, the trivial constant solution has enormous loss. However, MAE features can be less linearly separable than those from contrastive methods, even while performing well after end-to-end fine-tuning. Reconstruction rewards information useful for predicting missing pixels, including low-level detail that may not help a downstream classification task.
 
 ## Self-distillation: DINO
 
-The third family is strange because, on paper, it feels like it shouldn't work. DINO {% cite caron2021emerging %} casts the self-supervised learning problem as knowledge distillation {% cite hinton2015distilling %} with no pretrained teacher and two asymmetric branches, unlike the (usual) symmetric branches in contrastive methods. The teacher is the student's own exponential moving average (EMA); hence, it is *self*-distillation (an idea with roots in Mean Teacher from semi-supervised learning {% cite tarvainen2017mean %}). Both networks output a distribution over $K$ prototypes ($K$ is large in practice), and the student matches the teacher's distribution with a cross-entropy loss:
+The third family is strange because, on paper, it feels like it shouldn't work. DINO {% cite caron2021emerging %} casts the self-supervised learning problem as knowledge distillation {% cite hinton2015distilling %} with no pretrained teacher and two asymmetric branches, unlike the (usual) symmetric branches in contrastive methods. The teacher is the student's own exponential moving average (EMA). That makes it *self*-distillation (an idea with roots in Mean Teacher from semi-supervised learning {% cite tarvainen2017mean %}). Both networks output a distribution over $K$ prototypes ($K$ is large in practice), and the student matches the teacher's distribution with a cross-entropy loss:
 
 $$P_s(x) = \mathrm{softmax}\!\left(\frac{g_{\theta_s}(x)}{\tau_s}\right), \qquad P_t(x) = \mathrm{softmax}\!\left(\frac{g_{\theta_t}(x) - c}{\tau_t}\right)$$
 
@@ -79,7 +81,7 @@ $$\mathcal{L}_{\mathrm{SimDINO}} = \mathbb{E}\left[\, \tfrac12\lVert z_s-z_t\rVe
 
 Like negatives in contrastive learning, the $\log\det$ term pushes embeddings to spread out.
 
-Next, we’ll look at how to distribute any type of model training across devices.
+In general, the DINO family appears to have won out as it's been scaled relentlessly by at least one major company. While learning about the nuances of these algorithms is useful and customizing them for a specific use case is important, the difficult part is to learn how to distribute any training job across many devices for scaling up the model size and the dataset size. In the next post, we’ll look at how to distribute any type of model training across devices.
 
 # References
 

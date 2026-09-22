@@ -3,7 +3,10 @@ layout: post
 title: "Why won't the transformer die? Part 4: projection weights vs projections"
 description: What about the billion parameters?
 ---
-I've spent three posts calling self-attention a somewhat-non-parametric, dim-preserving lookup table with a learned metric. Where, then, do the billions of learned parameters fit into that picture? The right resolution in my view is the distinction between *projections* and *projection weights*, which is also what makes the architecture compositional.
+
+I've spent three posts calling self-attention a [somewhat-non-parametric]({% post_url 2026-05-03-transformer-soft-knn %}), [dim-preserving]({% post_url 2026-05-03-transformer-no-bottleneck %}) [lookup table with a learned metric]({% post_url 2026-08-30-transformer-three-design-choices %}). Where, then, do the billions of learned parameters fit into that picture? The right resolution in my view is the distinction between *projections* and *projection weights*, which is also what makes the architecture compositional.
+
+I find this distinction useful when thinking about how we extend a pretrained model. Adding retrieved documents, connecting a vision encoder, and reusing a layer all become easier to reason about once we separate what the model has learned from what we give it at inference time.
 
 ## Projection weights vs projections
 
@@ -23,12 +26,12 @@ is a fixed form $M = W_Q W_K^{T}$. The metric $M$ is parametric and the same for
 
 <figure class="concept-figure">
   <a href="{{ '/assets/images/transformer/weights-vs-projections.png' | relative_url }}">
-    <img src="{{ '/assets/images/transformer/weights-vs-projections.png' | relative_url }}" width="640" height="390" loading="lazy" alt="The same input X branches through separate projection weights W Q, W K, and W V to produce Q, K, and V. Weights are fixed at inference; projections depend on X.">
+    <img src="{{ '/assets/images/transformer/weights-vs-projections.png' | relative_url }}" width="640" height="390" loading="lazy" alt="The same input X branches through separate projection weights W Q, W K, and W V to produce Q, K, and V. Weights are fixed at inference. Projections depend on X.">
   </a>
   <figcaption>Self-attention: the same input supplies queries, keys, and values through three separate learned projection weight matrices.</figcaption>
 </figure>
 
-The separation enables composition. The attention parts of a stacked transformer can be read as $L$ soft $k$-NN lookups, each with its own learned metric and head structure, each operating on the reference set produced by the layer below. The MLP blocks between attention layers add parametric nonlinearities that the $k$-NN view ignores, and most of the parameter budget is concentrated there rather than the projection weights.
+The separation enables composition. The attention parts of a stacked transformer can be read as $L$ soft $k$-NN lookups, each with its own learned metric and head structure, each operating on the reference set produced by the layer below. The MLP blocks between attention layers add parametric nonlinearities that the $k$-NN view ignores, and most of the parameter budget is concentrated there rather than in the projection weights.
 
 So a billion-parameter transformer decomposes into:
 
@@ -39,9 +42,9 @@ So a billion-parameter transformer decomposes into:
 
 <figure class="concept-figure">
   <a href="{{ '/assets/images/transformer/parameter-overview.png' | relative_url }}">
-    <img src="{{ '/assets/images/transformer/parameter-overview.png' | relative_url }}" width="640" height="480" loading="lazy" alt="Embedding and unembedding matrices surround L transformer layers. Within a layer, h heads have separate Q, K, and V weight matrices; head outputs concatenate, pass through W O, then the MLP. Numbered markers match the four parameter groups in the list.">
+    <img src="{{ '/assets/images/transformer/parameter-overview.png' | relative_url }}" width="640" height="480" loading="lazy" alt="Embedding and unembedding matrices surround L transformer layers. Within a layer, h heads have separate Q, K, and V weight matrices. Head outputs concatenate, pass through W O, then the MLP. Numbered markers match the four parameter groups in the list.">
   </a>
-  <figcaption>The four parameter groups, numbered as above. Heads and layers have distinct weights; residual paths and normalization are omitted.</figcaption>
+  <figcaption>The four parameter groups, numbered as above. Heads and layers have distinct weights. Residual paths and normalization are omitted.</figcaption>
 </figure>
 
 The $k$-NN view explains the per-layer aggregation operation. MLPs also store learned associations, which the $k$-NN view does not address. Probing the MLP blocks directly {% cite geva2021transformer %} shows that the two feed-forward matrices behave like a static key-value memory of their own.
@@ -65,9 +68,9 @@ At autoregressive inference, the $K$ and $V$ projections of past tokens never ch
 
 <figure class="concept-figure">
   <a href="{{ '/assets/images/transformer/kv-cache.png' | relative_url }}">
-    <img src="{{ '/assets/images/transformer/kv-cache.png' | relative_url }}" width="640" height="355" loading="lazy" alt="At one head, append a key of width d k and a value of width d v to the cached matrices. A query of width d k matches keys; the lookup returns a vector of width d v.">
+    <img src="{{ '/assets/images/transformer/kv-cache.png' | relative_url }}" width="640" height="355" loading="lazy" alt="At one head, append a key of width d k and a value of width d v to the cached matrices. A query of width d k matches keys. The lookup returns a vector of width d v.">
   </a>
-  <figcaption>At one head during causal decoding, the cache grows by rows. Queries keep the key width; retrieved outputs keep the value width.</figcaption>
+  <figcaption>At one head during causal decoding, the cache grows by rows. Queries keep the key width. Retrieved outputs keep the value width.</figcaption>
 </figure>
 
 ## Generalized tool calling fits the weight/activation picture
@@ -78,12 +81,12 @@ Since $W_Q, W_K, W_V$ are data-invariant, what they encode at training time is t
   <a href="{{ '/assets/images/transformer/tool-context.png' | relative_url }}">
     <img src="{{ '/assets/images/transformer/tool-context.png' | relative_url }}" width="640" height="260" loading="lazy" alt="The request and tool descriptions enter the language model as context. With fixed inference weights, the model generates a tool name and arguments.">
   </a>
-  <figcaption>The interface comes from the context; the model brings its learned tool-use behavior.</figcaption>
+  <figcaption>The interface comes from the context. The model brings its learned tool-use behavior.</figcaption>
 </figure>
 
-## Test-time scaling via layer reuse (a.k.a looped transformers)
+## Test-time scaling via layer reuse (a.k.a. looped transformers)
 
-Two earlier framings combine here. The weight/activation split says the per-layer projection weights $W_Q, W_K, W_V$ are data-invariant, so the same attention operation can be applied to whatever activations it sees, including activations that came out of the same operation a moment earlier. The dim-preservation property says the output of a self-attention block sits in the same $\mathbb{R}^{N \times d}$ as the input, so feeding the layer's output back into itself is a type-correct thing to do (i.e. obeys the I/O contract semantics of the operation). In this type-based view, the layer accepts and returns tokens of `Type[Concept]`, so its outputs can be fed back in for further refinement. These are conceptual types; useful refinement still depends on training. Together, the architecture supports running the same layer multiple times against an evolving reference set, deepening the computation at test time without any new parameters.
+Two earlier framings combine here. The weight/activation split says the per-layer projection weights $W_Q, W_K, W_V$ are data-invariant, so the same attention operation can be applied to whatever activations it sees, including activations that came out of the same operation a moment earlier. The dim-preservation property says the output of a self-attention block sits in the same $\mathbb{R}^{N \times d}$ as the input, so feeding the layer's output back into itself is a type-correct thing to do (i.e., it obeys the I/O contract semantics of the operation). In this type-based view, the layer accepts and returns tokens of `Type[Concept]`, so its outputs can be fed back in for further refinement. These are conceptual types. Useful refinement still depends on training. Together, the architecture supports running the same layer multiple times against an evolving reference set, deepening the computation at test time without any new parameters.
 
 <figure class="concept-figure">
   <a href="{{ '/assets/images/transformer/layer-reuse.png' | relative_url }}">
@@ -92,7 +95,7 @@ Two earlier framings combine here. The weight/activation split says the per-laye
   <figcaption>The output satisfies the same conceptual input interface. Training must still make repeated updates useful.</figcaption>
 </figure>
 
-This is the architectural premise behind Universal Transformer {% cite dehghani2019universal %}, which ties attention and MLP weights across depth and includes an adaptive halting mechanism. PonderNet {% cite banino2021pondernet %} explores the related question of learning when to halt recurrent computation. Looped Transformers {% cite giannou2023looped %} use a tied stack as a programmable computational substrate. Recent recurrent-depth setups scale the same trick to language-model sizes and use it as a test-time compute knob {% cite geiping2025scaling %}. The matching input-output dimensions make the loop well-defined; learning useful repeated updates still requires suitable training. Here, recurrence updates the token representations, and therefore the reference set, across depth, rather than summarizing successive tokens into a recurrent state.
+This is the architectural premise behind Universal Transformer {% cite dehghani2019universal %}, which ties attention and MLP weights across depth and includes an adaptive halting mechanism. PonderNet {% cite banino2021pondernet %} explores the related question of learning when to halt recurrent computation. Looped Transformers {% cite giannou2023looped %} use a tied stack as a programmable computational substrate. Recent recurrent-depth setups scale the same trick to language-model sizes and use it as a test-time compute knob {% cite geiping2025scaling %}. The matching input-output dimensions make the loop well-defined. Learning useful repeated updates still requires suitable training. Here, recurrence updates the token representations, and therefore the reference set, across depth, rather than summarizing successive tokens into a recurrent state.
 
 There is one caveat here. The MLP block applied between attention layers is also data-invariant, but it implements a fixed nonlinear transformation on each token independently. Iterated-depth setups in the literature sometimes use a per-iteration timestep embedding to disambiguate which loop step the tied layer is running {% cite dehghani2019universal %}. I conjecture that the MLP block also needs more capacity to compensate for being applied repeatedly, since it is doing more per-parameter work each iteration, though I do not know of a clean empirical result that confirms this. This may be one architectural cost of sharing weights across depth.
 
@@ -104,15 +107,15 @@ $$H_v = Z W_A, \qquad W_A \in \mathbb{R}^{d_v \times d}.$$
 
 These visual tokens enter the input sequence alongside text embeddings. From there, the language model applies its usual attention and MLP blocks.
 
-In the lookup picture developed here, the adapter supplies additional reference points. The adapter $W_A$ is a *projection weight matrix*, fixed at inference; its outputs $H_v$ are image-dependent *projections*. The interface lets a pretrained model supply activations that another model can use as its reference set.
+In the lookup picture developed here, the adapter supplies additional reference points. The adapter $W_A$ is a *projection weight matrix*, fixed at inference. Its outputs $H_v$ are image-dependent *projections*. The interface lets a pretrained model supply activations that another model can use as its reference set.
 
-Matching dimensions is one aspect; training must make the encoder's features useful to the receiving model. For example, original LLaVA first trains the adapter with both pretrained models frozen, then tunes the adapter and language model on visual instructions while keeping the vision encoder frozen {% cite liu2023visual %}. In the same type-based view, the vision transformer produces `Type[Visual]` tokens, and the adapter maps them to `Type[LinguoVisual]`. With alignment training, the LLM learns to accept both language and adapted visual tokens, broadening its input type from `Type[Language]` to `Type[Union[Language, LinguoVisual]]`. My interpretation is that the common token interface makes composition architecturally straightforward, while learned alignment makes it useful.
+Getting the dimensions to match is one part of it. Training still has to make the encoder's features useful to the receiving model. For example, original LLaVA first trains the adapter with both pretrained models frozen, then tunes the adapter and language model on visual instructions while keeping the vision encoder frozen {% cite liu2023visual %}. In the same type-based view, the vision transformer produces `Type[Visual]` tokens, and the adapter maps them to `Type[LinguoVisual]`. With alignment training, the LLM learns to accept both language and adapted visual tokens, broadening its input type from `Type[Language]` to `Type[Union[Language, LinguoVisual]]`. My interpretation is that the common token interface makes composition architecturally straightforward, while learned alignment makes it useful.
 
 <figure class="concept-figure">
   <a href="{{ '/assets/images/transformer/multimodal-adapter.png' | relative_url }}">
     <img src="{{ '/assets/images/transformer/multimodal-adapter.png' | relative_url }}" width="640" height="390" loading="lazy" alt="The adapter maps Type[Visual] features of width d v into Type[LinguoVisual] tokens of width d. These join Type[Language] tokens at the VLM input, labeled Type[Union[Language, LinguoVisual]].">
   </a>
-  <figcaption>The adapter connects Type[Visual] to Type[LinguoVisual]; the VLM accepts Type[Union[Language, LinguoVisual]]. These are conceptual types, with compatibility learned through alignment.</figcaption>
+  <figcaption>The adapter connects Type[Visual] to Type[LinguoVisual]. The VLM accepts Type[Union[Language, LinguoVisual]]. These are conceptual types, with compatibility learned through alignment.</figcaption>
 </figure>
 
 For a complementary software-engineering treatment of transformer interfaces and types, see Nelson Elhage's [*Transformers for software engineers*](https://blog.nelhage.com/post/transformers-for-software-engineers/).
@@ -120,6 +123,8 @@ For a complementary software-engineering treatment of transformer interfaces and
 ## Concluding Remarks: Refuses to die
 
 The per-layer operation does not care where the reference set comes from, as long as the projection weights and the projections are consistently employed in the "typing sense". In general, the compositional properties of transformers are very exciting, and even the worst parts (the O(N^2) asymptotics) are papered over by system-level advancements like FlashAttention.
+
+This is the picture I wanted to build across these four posts. We can ask what information an architecture keeps, how it retrieves from that information, and which parts are learned or provided by the input. I find those questions useful when deciding what to change in a model.
 
 In general, research has settled on attention and its variants as the dominant architectures, and they seem unlikely to be displaced anytime soon, but here's to hope and progress in science!
 
