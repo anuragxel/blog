@@ -31,11 +31,11 @@ This is the setup of classical *metric learning* {% cite weinberger2009distance 
 
 Self-attention is a generalization of this setup. In classical metric learning, a bilinear form $\langle x_i, x_j \rangle_M = x_i^{T} M x_j$ with $M$ symmetric PSD defines a Mahalanobis inner product. Attention relaxes both constraints ($M = W_Q W_K^{T}$ is in general neither symmetric nor PSD), keeping only the low-rank structure. The asymmetry is a feature as it lets the score for $i$ attending to $j$ differ from $j$ attending to $i$, which matters once tokens play directional roles.
 
-Thus, if we have a learned similarity, exponentiating and row-normalizing gives us
+Thus, if we have a learned similarity, exponentiating and row-normalizing gives us the weights
 
-$$\mathrm{softmax}\!\left( \frac{x_i^{T} M x_j}{\sqrt{d_k}} \right)_j$$
+$$\alpha_{ij} = \mathrm{softmax}\!\left( \frac{x_i^{T} M x_j}{\sqrt{d_k}} \right)_j.$$
 
-which is a Nadaraya-Watson estimator {% cite nadaraya1964estimating watson1964smooth %} with a learned kernel $k(x_i, x_j) = \exp(x_i^{T} M x_j / \sqrt{d_k})$ {% cite tsai2019transformer %}. Read the whole self-attention layer that way and the analogy is:
+The weighted sum of values, $\sum_j \alpha_{ij} v_j$, is a Nadaraya-Watson-style estimator {% cite nadaraya1964estimating watson1964smooth %} with a learned kernel $k(x_i, x_j) = \exp(x_i^{T} M x_j / \sqrt{d_k})$ {% cite tsai2019transformer %}. Read the whole self-attention layer that way and the analogy is:
 
 - Queries $q_i$ are test points.
 - Keys $k_j$ are reference points.

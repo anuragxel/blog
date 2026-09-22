@@ -122,7 +122,7 @@ For a complementary software-engineering treatment of transformer interfaces and
 
 ## Concluding Remarks: Refuses to die
 
-The per-layer operation does not care where the reference set comes from, as long as the projection weights and the projections are consistently employed in the "typing sense". The compositional properties of transformers are very exciting, and even the worst parts (the O(N^2) asymptotics) are papered over by system-level advancements like FlashAttention.
+The per-layer operation does not care where the reference set comes from, as long as the projection weights and the projections are consistently employed in the "typing sense". The compositional properties of transformers are very exciting, and system-level advancements like FlashAttention make attention more practical by reducing memory traffic and avoiding storage of the full attention matrix. The arithmetic cost of exact dense attention still grows quadratically with the number of tokens.
 
 This is the picture I wanted to build across these four posts. We can ask what information an architecture keeps, how it retrieves from that information, and which parts are learned or provided by the input. Those questions help me decide what to change in a model.
 

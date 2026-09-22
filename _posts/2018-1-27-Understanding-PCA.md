@@ -42,7 +42,7 @@ $$ \mathbf{min} \quad || X - (Xp)p^{T} || $$
 
 $$ s.t. \quad\quad p^{T}p = 1 $$
 
-Convince yourself that this is equivalent to the reconstruction loss mentioned above. Also, the constraint just implies that the direction $p$ to be found should be a unit vector. This is because any scaled version of $p$ will also correspond to a solution.
+Convince yourself that this is equivalent to the reconstruction loss mentioned above. The constraint makes $p$ a unit vector, so $(Xp)p^{T}$ is an orthogonal projection. Scaling $p$ changes this reconstruction, so the normalization matters.
 
 ### Covariance Maximization
 
@@ -150,4 +150,14 @@ def pca(X, k):
     cov = np.cov(X, rowvar=False)
     w, v = np.linalg.eigh(cov)
     return v[:, ::-1][:, :k]
+```
+
+This returns the principal directions as columns, so the result is $P^{T}$ in our earlier notation. To project the samples and reconstruct them in the original space:
+
+```python
+mean = X.mean(axis=0)
+X_centered = X - mean
+directions = pca(X_centered, k)
+X_projected = X_centered @ directions
+X_reconstructed = X_projected @ directions.T + mean
 ```
