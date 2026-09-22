@@ -26,6 +26,13 @@ $$\ell_{i,j} = -\log \frac{\exp(\mathrm{sim}(z_i, z_j)/\tau)}{\sum_{k=1}^{2B} \m
 
 where $\mathrm{sim}(u, v) = u^{T} v / \lVert u \rVert \lVert v \rVert$ is cosine similarity and $\tau$ is a temperature. This is a $(2B-1)$-way softmax classification problem: given view $i$, identify its partner $j$ among the other views in the batch. The other $2B - 2$ views act as *negatives*.
 
+<figure class="concept-figure">
+  <a href="{{ '/assets/images/scaling/scaling0-simclr.png' | relative_url }}">
+    <img src="{{ '/assets/images/scaling/scaling0-simclr.png' | relative_url }}" width="640" height="310" loading="lazy" alt="Two distinct crops of one mountain and tree scene pass through a shared encoder and land close together, while a boat and a house land farther away.">
+  </a>
+  <figcaption>SimCLR pulls crops of the same image together and pushes other images apart.</figcaption>
+</figure>
+
 The loss has the functional form of InfoNCE {% cite oord2018representation %}. Under its usual sampling assumptions, minimizing InfoNCE maximizes a lower bound on mutual information between the two views. With $2B-1$ candidates, that bound cannot exceed $\log(2B-1)$. I treat this as motivation rather than a complete explanation for SimCLR's batch-size results. Larger batches, including batches of thousands of images, provide more in-batch negatives, which SimCLR found empirically useful.
 
 Three design decisions in SimCLR are worth dwelling on:
@@ -50,6 +57,13 @@ over the masked set $\mathcal{M}$ only, where $x_i$ is the (per-patch normalized
 
 **Asymmetry is the systems win.** MAE's encoder sees *only* the patches that are visible. A lightweight decoder takes the encoded visible patches plus learned mask tokens (with positional embeddings) and reconstructs the image. Skipping masked tokens in the encoder reduces training FLOPs and produced an approximately 2× to 4× wall-clock speedup. SimMIM instead does the opposite: the full masked sequence goes through the encoder, and the "decoder" is a single linear layer predicting pixels with an $\ell_1$ loss. It is simpler and works with hierarchical backbones like Swin and even convolutional backbones, but it does not get MAE's encoder-side savings from dropping masked tokens. Interpreting both MAE and SimMIM together provides us with a nice picture: *high masking ratio + direct pixel regression* is the core recipe.
 
+<figure class="concept-figure">
+  <a href="{{ '/assets/images/scaling/scaling0-mae-simmim.png' | relative_url }}">
+    <img src="{{ '/assets/images/scaling/scaling0-mae-simmim.png' | relative_url }}" width="640" height="335" loading="lazy" alt="MAE sends only visible scene patches through its encoder and adds blank mask tokens at the decoder. SimMIM carries blank positions through its encoder. Both predict the missing scene content.">
+  </a>
+  <figcaption>MAE drops hidden patches before the encoder, while SimMIM carries the blanks through.</figcaption>
+</figure>
+
 **Sidestepping collapse.** As the target is the data itself, the trivial constant solution has enormous loss. However, MAE features can be less linearly separable than those from contrastive methods, even while performing well after end-to-end fine-tuning. Reconstruction rewards information useful for predicting missing pixels, including low-level detail that may not help a downstream classification task.
 
 ## Self-distillation: DINO
@@ -67,6 +81,13 @@ Collapse prevention is where DINO gets weird. With no negative samples and no re
 - **Centering**: Subtract a running mean $c \leftarrow m c + (1-m) \frac{1}{B}\sum_i g_{\theta_t}(x_i)$ from teacher logits. This prevents any single bin from dominating but pushes the learning dynamics toward the uniform solution.
 - **Sharpening**: Use a teacher temperature $\tau_t < \tau_s$ (with its own warmup schedule). This prevents the uniform solution but pushes toward a delta solution.
 
+<figure class="concept-figure">
+  <a href="{{ '/assets/images/scaling/scaling0-dino.png' | relative_url }}">
+    <img src="{{ '/assets/images/scaling/scaling0-dino.png' | relative_url }}" width="640" height="325" loading="lazy" alt="A teacher sees a large scene crop and a student sees a smaller crop. Their output distributions match. A dashed EMA arrow leads from student weights to teacher weights.">
+  </a>
+  <figcaption>The student matches a teacher that sees more of the image and slowly follows the student’s weights.</figcaption>
+</figure>
+
 The balancing act between these two heuristics is tricky and genuinely fragile. There's also the headache of tuning the EMA schedule, the temperature schedules, weight-decay schedules, and the last-layer freezing tricks. While the method works spectacularly (the emergent attention-map segmentation in DINO and the DINOv2 {% cite oquab2024dinov2 %} features are absolutely beautiful, especially with registers {% cite darcet2024vision %}), it is a stack of empirically discovered training stability tricks. Why these mechanisms avoid collapse is still not fully settled. The DINO paper shows empirically that centering and sharpening together prevent the two observed forms of output collapse. Their interaction shapes the training dynamics.
 
 ### SimDINO: Deleting the training stability tricks
@@ -80,6 +101,13 @@ This measures how spread out the embeddings are, at a scale set by $\epsilon$. I
 $$\mathcal{L}_{\mathrm{SimDINO}} = \mathbb{E}\left[\, \tfrac12\lVert z_s-z_t\rVert_2^2\right] \; - \; \gamma \, R(Z_s)$$
 
 Like negatives in contrastive learning, the $\log\det$ term pushes embeddings to spread out.
+
+<figure class="concept-figure">
+  <a href="{{ '/assets/images/scaling/scaling0-simdino.png' | relative_url }}">
+    <img src="{{ '/assets/images/scaling/scaling0-simdino.png' | relative_url }}" width="640" height="305" loading="lazy" alt="Illustrative unit-sphere geometry shows three scenes mapping to the same point under collapse and to distinct directions when spread out. Blue rings and green centers represent matching view pairs.">
+  </a>
+  <figcaption>In this illustration, matching views can still collapse, so SimDINO also rewards spreading across directions.</figcaption>
+</figure>
 
 ### Concluding Remarks
 

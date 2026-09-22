@@ -84,11 +84,25 @@ Those two exchanges are the collectives introduced above: an **all-gather** reco
 
 Under this schedule, the temporary full weights are discarded after forward and gathered again for backward. Dividing the reduce-scattered gradient sums by $N$ gives each device the averaged gradient shard for its local optimizer update.
 
+<figure class="concept-figure">
+  <a href="{{ '/assets/images/scaling/scaling1-fsdp.png' | relative_url }}">
+    <img src="{{ '/assets/images/scaling/scaling1-fsdp.png' | relative_url }}" width="640" height="515" loading="lazy" alt="Two device memories start with different colored parameter shards. All-gather temporarily gives both devices the full layer for computation. Freeing the temporary copies leaves the original shards.">
+  </a>
+  <figcaption>Keep a shard, briefly assemble the layer, then free the temporary copies.</figcaption>
+</figure>
+
 ## Tensor parallelism: shard the matmul
 
 DP and FSDP divide the batch, but each device still executes the full model for its local microbatch. Tensor parallelism (TP) instead partitions weight matrices so that devices share a layer's FLOPs and intermediate activations {% cite shoeybi2019megatron %}.
 
 Consider an MLP $Y = \mathrm{GeLU}(XA)B$: $X$ is the input activation matrix, $A$ and $B$ are the first and second weight matrices, and $Y$ is the output. The input $X$ is replicated across devices. Splitting $A$ across columns produces separate activation shards, with GeLU applied locally. Splitting $B$ across rows lets those shards feed directly into the second matmul. An all-reduce sums the resulting partial outputs. No device has to materialize the full intermediate activation. Attention follows the same pattern by assigning heads to devices and combining them at the output projection.
+
+<figure class="concept-figure">
+  <a href="{{ '/assets/images/scaling/scaling1-tensor-parallel.png' | relative_url }}">
+    <img src="{{ '/assets/images/scaling/scaling1-tensor-parallel.png' | relative_url }}" width="640" height="530" loading="lazy" alt="A is split into colored columns and B into matching rows. Each device computes GeLU of X times its A slice, then multiplies by its B slice. All-reduce sums the partial outputs into Y, replicated on both devices.">
+  </a>
+  <figcaption>Forward pass: matching slices of A and B keep the hidden activation local. All-reduce sums the partial outputs and gives Y to both devices.</figcaption>
+</figure>
 
 These collectives operate on arrays of size $\text{microbatch} \times \text{sequence} \times \text{hidden}$, occur on every layer, and sit on the critical path. TP is therefore usually confined to the fastest interconnect, often within a node.
 
@@ -97,6 +111,13 @@ These collectives operate on arrays of size $\text{microbatch} \times \text{sequ
 The fourth strategy shards by *depth*. Split the model into $S$ stages, each owning a consecutive group of layers. Data flows through the stages like an assembly line. Its communication profile is: no collectives are required between stages, only point-to-point handoffs of boundary activations ($\text{microbatch} \times \text{seq} \times \text{hidden}$ elements forward, with a similarly shaped activation gradient backward) between neighboring stages. This is often a low communication volume because each transfer crosses only one boundary, making pipeline parallelism attractive across slower links.
 
 The cost is utilization: stages sit idle while the pipeline fills and drains. GPipe {% cite huang2019gpipe %} addresses this by splitting the batch into $m$ microbatches that flow through the pipeline in a staggered fashion, so that with $S$ balanced stages and negligible communication overhead, the idle "bubble" occupies approximately $\frac{S-1}{m + S - 1}$ of the step.
+
+<figure class="concept-figure">
+  <a href="{{ '/assets/images/scaling/scaling1-pipeline.png' | relative_url }}">
+    <img src="{{ '/assets/images/scaling/scaling1-pipeline.png' | relative_url }}" width="640" height="590" loading="lazy" alt="GPipe schedules on three equal-cost stages. With one microbatch, a forward travels through stages zero to two, then backward returns through stages two to zero over six time slots. Four microbatches stagger forwards and, after all forwards finish, backwards over twelve slots. Gray idle cells occupy two-thirds and one-third of the respective grids.">
+  </a>
+  <figcaption>F and B are forward and backward work. Numbers identify microbatches. Gray cells are idle. More microbatches shrink the bubble.</figcaption>
+</figure>
 
 ## Composition for large-scale training
 
