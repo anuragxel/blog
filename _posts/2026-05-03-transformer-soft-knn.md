@@ -7,7 +7,7 @@ date: 2026-05-03 12:00:00 -0500
 
 This is part 2 of a four-part series. [Part 1]({% post_url 2026-05-03-transformer-no-bottleneck %}) argued that keeping the number of tokens and their dimensions unchanged across transformer blocks is one reason transformers are hard to displace. This post is about how I find it useful to think about the lookup itself: self-attention behaves like soft $k$-NN, with a learned way to measure similarity.
 
-I find this connection useful because it gives us familiar ideas from classical machine learning to reason about attention. It also gives us a way to think about why the same operation is useful for such different inputs, from image patches to text tokens.
+I like this connection because it lets us reason about attention with familiar ideas from classical machine learning, and it hints at why the same operation works on inputs as different as image patches and text tokens.
 
 ## Recap
 
@@ -29,7 +29,7 @@ where $M = W_Q W_K^{T} \in \mathbb{R}^{d \times d}$ is one learned matrix. The e
 
 This is the setup of classical *metric learning* {% cite weinberger2009distance %}. A bilinear form $\langle x_i, x_j \rangle_M = x_i^{T} M x_j$ defines a similarity (an inner product, when $M$ is symmetric positive-semidefinite). Metric learning and its many variants all amount to picking such an $M$ so that semantically similar points score high. The inner product in the raw input space is generally not meaningful, but if you have a way to project your inputs to some metric space (which your self-attention operation does), the inner product becomes a useful similarity.
 
-Self-attention is a generalization of this setup. In classical metric learning, a bilinear form $\langle x_i, x_j \rangle_M = x_i^{T} M x_j$ with $M$ symmetric PSD defines a Mahalanobis inner product. Attention relaxes both constraints ($M = W_Q W_K^{T}$ is in general neither symmetric nor PSD), keeping only the low-rank structure. The asymmetry is a feature as it lets the score for $i$ attending to $j$ differ from $j$ attending to $i$, which matters once tokens play directional roles.
+Self-attention is a generalization of this setup. In classical metric learning, a bilinear form $\langle x_i, x_j \rangle_M = x_i^{T} M x_j$ with $M$ symmetric PSD defines a Mahalanobis inner product. Attention relaxes both constraints ($M = W_Q W_K^{T}$ is in general neither symmetric nor PSD), keeping only the low-rank structure. The asymmetry is a feature, since it lets the score for $i$ attending to $j$ differ from $j$ attending to $i$, which matters once tokens play directional roles.
 
 <figure class="concept-figure">
   <a href="{{ '/assets/images/transformer/soft-knn.png' | relative_url }}">
@@ -99,15 +99,15 @@ The heads provide separate channels for different modes of relevance, keeping th
 
 Pretraining can be seen as metric learning in this light. Each self-attention layer performs soft $k$-NN over its own learned metric, so any training loss that updates $W_Q$ and $W_K$ is also optimizing the inner product that decides which tokens score high together at that layer. The objective does not have to be a contrastive metric-learning loss explicitly. Masked language modeling, masked image modeling, and contrastive image-text losses all train these per-layer metrics, just with different supervision signals.
 
-Consider DINO {% cite caron2021emerging %}, DINOv2 {% cite oquab2024dinov2 %}, or any image/video foundation model. This lens may partly help explain their feature quality, though within-image attention alone does not establish across-image similarity. You train layer-wise soft $k$-NN over each image's tokens, across an astonishingly large collection of images, and the network learns the metric space in which that layer-wise soft $k$-NN works. Both report $k$-NN classification accuracy on frozen features as a flagship evaluation alongside linear probing, on the basis that a well-trained representation should already place same-class examples near each other in the learned space. CLIP {% cite radford2021learning %} works the same way at inference time, scoring an image embedding against a set of text embeddings with cosine similarity, which is the cross-attention score with hard top-1 selection.
+Consider DINO {% cite caron2021emerging %}, DINOv2 {% cite oquab2024dinov2 %}, or any image/video foundation model. You train layer-wise soft $k$-NN over each image's tokens, across an astonishingly large collection of images, and the network learns the metric space in which that soft $k$-NN works. I suspect this is part of why their features are so good (though, strictly, attention within an image doesn't by itself guarantee good similarity across images). DINO and DINOv2 both report $k$-NN classification accuracy on frozen features as a flagship evaluation alongside linear probing, on the basis that a well-trained representation should already place same-class examples near each other in the learned space. CLIP {% cite radford2021learning %} works the same way at inference time, scoring an image embedding against a set of text embeddings with cosine similarity, which is the cross-attention score with hard top-1 selection.
 
 That $k$-NN is a hard baseline to beat is not a deep-learning-era observation. Beyond the bounds {% cite cover1967nearest %} and universal consistency results {% cite stone1977consistent %}, the practical folklore has been repeated, including the explicit defense of naive nearest-neighbor classification on image features as competitive {% cite boiman2008defense %}. The same pattern keeps recurring in the deep era: $k$-NN on top of language model representations improves perplexity {% cite khandelwal2020generalization %}, and retrieval-augmented generation lifts large LMs {% cite lewis2020retrieval %}.
 
 ## Still won't die
 
-Learned similarity, learned labels, and a context-shaped reference set may help explain why transformers work across modalities. Architectures that constrain these properties (RNNs and SSMs that compress the reference set into a fixed-size hidden state, MLPs without context-dependent retrieval) may need other mechanisms to recover similar flexibility. The distinction I find useful when changing a model is whether I am changing the learned similarity, the values being retrieved, or the available reference set.
+Learned similarity, learned labels, and a reference set shaped by the context go a long way toward explaining why transformers work across modalities. Architectures that constrain these properties (RNNs and SSMs that compress the reference set into a fixed-size hidden state, MLPs without context-dependent retrieval) probably need some other mechanism to get that flexibility back.
 
-This view still leaves a few choices in the attention formula that I would like to understand. The [next post]({% post_url 2026-08-30-transformer-three-design-choices %}) zooms in on the three specific design choices inside this lookup, asking why we use three projection weight matrices, the inner product, and softmax.
+This view still leaves a few choices in the attention formula unexplained. The [next post]({% post_url 2026-08-30-transformer-three-design-choices %}) zooms in on the three specific design choices inside this lookup, asking why we use three projection weight matrices, the inner product, and softmax.
 
 # References
 

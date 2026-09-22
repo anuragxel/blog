@@ -4,21 +4,21 @@ title: "Pretrain a vision model from scratch. Step 3: Use JAX. It is very cool."
 description: Meshes, shardings and named axes.
 ---
 
-In the last couple of posts, we discussed the fundamentals of different [Visual SSL families](https://anuragxel.github.io/blog/scaling-1-visual-ssl/) and then we discussed the fundamentals underpinning [distributed model scaling strategies](https://anuragxel.github.io/blog/scaling-2-parallelism/). As we saw earlier, distributed model scaling strategies are nothing but placements of arrays on devices plus a handful of communication collectives, ranked by memory, compute and communication overheads.
+In the last couple of posts, we discussed the fundamentals of different [Visual SSL families]({% post_url 2026-09-18-scaling-1-visual-ssl %}) and then we discussed the fundamentals underpinning [distributed model scaling strategies]({% post_url 2026-09-18-scaling-2-parallelism %}). As we saw earlier, distributed model scaling strategies are nothing but placements of arrays on devices plus a handful of communication collectives, ranked by memory, compute and communication overheads.
 
-This post is about why I think JAX makes the most appropriate substrate for that view: not because it's faster, but because its abstractions make scaling as simple as considering the mesh of devices and the sharding placement, and letting XLA cook. It is thus beautiful to read and write distributed machine learning code in.
+This post is about why I think JAX fits that view best. It's not about speed. Its abstractions make scaling as simple as picking a mesh of devices and a sharding placement, and letting XLA cook. That makes distributed ML code in JAX a joy to read and write.
 
 ## The premise: programs as pure functions
 
 JAX {% cite jax2018github %} lets us write numerical code as *pure functions* on arrays (and on *pytrees*, i.e., arbitrarily nested containers of arrays). In return, we get program transformations as higher-order functions:
 
-- `jax.grad(f)` — a new function computing $\nabla f$,
-- `jax.jit(f)` — $f$ traced and compiled, with compiled programs reused for matching input signatures,
-- `jax.vmap(f)` — $f$ mapped over a new batch axis, without writing the batch axis.
+- `jax.grad(f)`: a new function computing $\nabla f$,
+- `jax.jit(f)`: $f$ traced and compiled, with compiled programs reused for matching input signatures,
+- `jax.vmap(f)`: $f$ mapped over a new batch axis, without writing the batch axis.
 
 Functional purity is what makes the above possible. `f` has no hidden state: parameters go in as arguments and anything that changes comes back as a return value. Think of `f` as a mathematical function. Because there are no side effects, tracing `f` once with abstract inputs captures the entire computation, and XLA can optimize the whole program rather than one op at a time.
 
-While JAX has a steeper learning curve than PyTorch, the mental model of pure functions plus transformations helps untangle the mystery of distributed ML and makes scaling more straightforward. We shall now look at sharding neural networks using this framework.
+While JAX has a steeper learning curve than PyTorch, the mental model of pure functions plus transformations helps untangle the mystery of distributed ML and makes scaling more straightforward. Let's now look at sharding neural networks with this mental model.
 
 ## Sharding as placement
 
@@ -43,9 +43,9 @@ We will change how these arrays are distributed while keeping the computation fi
 
 ### A 256-device example
 
-GPU and TPU systems have communication locality, from devices within a node to nearby nodes or a TPU slice, and then across larger groups or slices. A useful starting point is TP within the fastest local group, DP among nearby groups, and PP across the slower boundaries. This keeps frequent communication close to the devices doing the work.
+Real GPU and TPU clusters are hierarchical: devices within a node (or a TPU slice) talk fast, nearby nodes a bit slower, and everything farther away slower still. As we saw last time, a decent default is TP inside the fastest group, DP across nearby groups, and PP across the slowest boundaries, so the chattiest communication stays local.
 
-A **mesh** is a named grid of devices. For our DP, FSDP, and TP configurations, its axes are `replica`, `fsdp`, and `tensor`. Their sizes specify how many devices participate in each form of parallelism.
+A **mesh** is a grid of devices with named axes. Ours has three, `replica`, `fsdp`, and `tensor`, and the size of each axis says how many devices take part in that form of parallelism.
 
 For the code example, consider 32 hosts with 8 devices each. Assuming the device list is grouped by host, we can reshape it into the configuration we want:
 
@@ -83,13 +83,13 @@ We can similarly group devices by neighbourhood or TPU slice to keep frequent co
 
 #### Defining the array placements
 
-A `PartitionSpec` specifies which mesh axes split each array dimension. For a matrix, its entries describe the rows and columns. `None` leaves a dimension unsplit. The array is replicated along unused mesh axes.
+A `PartitionSpec` says, for each array dimension, which mesh axes split it (for a matrix, one entry for the rows and one for the columns). `None` leaves that dimension whole, and the array is replicated along any mesh axis the spec doesn't mention.
 
-Finally, `NamedSharding` combines a `PartitionSpec` with the device `Mesh` to determine where the array is stored.
+`NamedSharding` then pairs a `PartitionSpec` with the device `Mesh` to pin down where each piece of the array lives.
 
-Let's consider the selected `(32, 8, 1)` configuration. Each host keeps a copy of the model, divided among its eight devices. Each device also gets a different part of the batch. We express this by splitting the batch over `replica` and `fsdp`, and the weights over `fsdp`.
+Take the `(32, 8, 1)` configuration we picked. Each host keeps a copy of the model split across its eight devices, and every device gets its own slice of the batch. So we split the batch over both `replica` and `fsdp`, and the weights over `fsdp` only.
 
-The same rules work for TP. When `tensor` is larger than one, we divide the hidden neurons among devices. Each device needs the corresponding columns of `w_up` and rows of `w_down`. Here `tensor` has size one, so those dimensions stay whole.
+TP follows the same rules. When `tensor` is larger than one, the hidden neurons get divided among devices, and each device holds the matching columns of `w_up` and rows of `w_down`. Here `tensor` has size one, so those dimensions stay whole.
 
 ```python
 def placement(spec):
@@ -102,7 +102,7 @@ param_shardings = {
 }
 ```
 
-Now we compile the original loss and its gradient. We tell `jit` how the inputs are distributed and ask it to return gradients distributed like the weights. JAX works out the communication needed to perform the calculation.
+Now we compile the loss and its gradient. We tell `jit` how the inputs are laid out and ask for gradients laid out like the weights, and JAX works out all the communication in between.
 
 ```python
 loss_and_grad = jax.jit(
@@ -187,11 +187,11 @@ def dp_grads(params, x, target):
 
 ## Style choices
 
-The rest of this post is about legibility and a style guide for writing clean code that is easy to read. These stylistic choices derive from the same philosophical point: **name the axes**.
+The rest of this post is about legibility, i.e., my style guide for writing JAX code that's easy to read. It all comes from one idea: **name the axes**.
 
 ### jaxtyping: shapes, names and types in signatures
 
-Shape mistakes can cause inscrutable reshape or broadcast errors—or, worse, silent broadcasts that produce incorrect results. Often, the programmer then traces the entire forward pass manually to identify the issue. As the forward pass often spans multiple files, debugging is difficult. `jaxtyping` puts the shape contract in the function signature, helping catch input and output shape mismatches at function boundaries when runtime checking is enabled:
+Shape mistakes give you inscrutable reshape or broadcast errors or, worse, silent broadcasts that quietly produce wrong results. Then you end up tracing the whole forward pass by hand, usually across several files, to find the bug. `jaxtyping` puts the shape contract in the function signature, helping catch input and output shape mismatches at function boundaries when runtime checking is enabled:
 
 ```python
 from jaxtyping import Array, Float, Int
@@ -204,11 +204,11 @@ def attention(
     ...
 ```
 
-With runtime checking enabled (via jaxtyping and beartype), symbolic dimensions (`"n d"`) unify across arguments within a call. If `q` and `k` disagree on `d`, that's an error *at this function's boundary*. The annotations become enforced documentation. I think of jaxtyping annotations as defining the *interface contract*: the signature states the tensor type and shape semantics.
+With runtime checking enabled (via jaxtyping and beartype), symbolic dimensions (`"n d"`) unify across arguments within a call. If `q` and `k` disagree on `d`, that's an error *at this function's boundary*. The annotations become documentation that actually gets enforced. I think of them as the function's *interface contract*.
 
 ### einops and einx: shapes, names and types in operations
 
-The same idea about *contracts* can be extended to function *bodies*. Older primitives like `reshape`/`transpose`/`unsqueeze` are limited: positional axis indices do not communicate the axes’ semantic roles, and a new reader must re-derive the tensor layout (or annotate the layout in the variable name as `"tensor_BHWC"`). It is thus better to **enforce named-axes contracts while manipulating tensors**.
+The same idea about *contracts* can be extended to function *bodies*. Older primitives like `reshape`/`transpose`/`unsqueeze` refer to axes by position, which says nothing about what each axis means, so a new reader has to re-derive the tensor layout (or you end up naming variables `"tensor_BHWC"`). It is thus better to **enforce named-axes contracts while manipulating tensors** too.
 
 einops {% cite rogozhnikov2022einops %} instead allows tensor manipulation with spelled-out axes. For example, the ViT patchify operation can be written as follows:
 
@@ -241,9 +241,9 @@ image_1d_tokens: Float[Array, "b n d"] = einx.id("b h w d -> b (h w) d", image_t
 
 Another useful style suggestion: **use consistent names for array dimensions, and make their mapping to device axes explicit**. A batch dimension called `b` in a jaxtyping signature should also be `b` in einops or einx. In our MLP, that dimension is distributed over the mesh axes `replica` and `fsdp`. Array dimensions describe the data while mesh axes describe how devices share it. Keeping that mapping visible makes both the model and its distributed execution easier to read.
 
-### Concluding Remarks
+## Name the axes, let XLA cook
 
-We saw how JAX lets us express distributed training through array placement on a device mesh, with the compiler working out the communication. Naming the axes also makes the model easier to read, from shape annotations to tensor operations. I like this way of writing code because it makes both the computation and where it runs easier to follow.
+In JAX, distributed training mostly comes down to saying where arrays live on a device mesh and letting the compiler handle the communication. Name the axes everywhere (in signatures, in einops/einx calls, and in the mesh), and you can read both what the code computes and where it runs straight off the page. That's why I think JAX is cool.
 
 In the last post, we'll examine SimDINO, the Visual SSL method based on self-distillation [introduced earlier]({% post_url 2026-09-18-scaling-1-visual-ssl %}#simdino-deleting-the-training-stability-tricks), and observe the elegance of writing the EMA teacher, the stop-gradient, and the sharded training step in JAX.
 

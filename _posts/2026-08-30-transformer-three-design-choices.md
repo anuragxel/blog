@@ -6,7 +6,7 @@ description: Why three projection weight matrices, why inner product, why softma
 
 This is part 3 of a four-part series. Parts [1]({% post_url 2026-05-03-transformer-no-bottleneck %}) and [2]({% post_url 2026-05-03-transformer-soft-knn %}) set up a way to think about self-attention: it keeps the token dimensions intact and looks up information among the input tokens using learned similarities. Calling Q, K, and V "queries, keys, and values" gives me names for the matrices but doesn't provide intuition for why the operation looks the way it does.
 
-I also want to know what freedom I lose if I tie two of their weight matrices together, for example. These are the sorts of questions I want to be able to answer before changing an attention layer. This post takes apart each specific choice, in terms of the number of projection weight matrices, the inner product, and softmax.
+I also want to know, for example, what freedom I lose if I tie two of their weight matrices together. This post takes apart each specific choice: the number of projection weight matrices, the inner product, and softmax.
 
 ## Why three projection weight matrices? QKV as content-addressable lookup
 
@@ -57,11 +57,11 @@ We have settled on three projections, but why is the score itself an inner produ
 
 Recall that attention's effective similarity is $\exp(x_i^{T} M x_j / \sqrt{d_k})$ with $M = W_Q W_K^{T}$ {% cite tsai2019transformer %}. The natural worry is that "exp of an inner product" might be a restrictive family. Kernel methods {% cite scholkopf2002learning %} suggest why inner products can be expressive when applied to suitable learned features. Every positive-definite kernel decomposes as $K(x, y) = \langle \phi(x), \phi(y) \rangle$ in some (possibly infinite-dimensional) feature space. Attention's learned features $q = W_Q^{T} x$ and $k = W_K^{T} x$ suggest a related idea: learn the representations used in the inner product. The analogy has limits, though: separate Q/K maps need not define a positive-definite kernel, and linear maps alone do not represent every kernel.
 
-With unconstrained, separate $W_Q$ and $W_K$, their product can in principle represent any bilinear form of rank at most $d_k$ on the input space. This is an algebraic capacity statement, not a guarantee that training will find a useful similarity. Increasing $d_k$ relaxes the rank constraint, but does not make linear Q/K maps universal: a bilinear score on raw inputs cannot generally reproduce a kernel such as RBF. Whether this family is expressive enough depends on the task and the input representations, which may already contain nonlinear features learned by preceding layers. The connection to metric and kernel learning is useful as an intuition, rather than an equivalence, since $W_Q W_K^{T}$ need not be symmetric or positive-semidefinite.
+With unconstrained, separate $W_Q$ and $W_K$, their product can in principle represent any bilinear form of rank at most $d_k$ on the input space (whether training actually finds a useful one is a different question). Increasing $d_k$ relaxes the rank constraint, but a bilinear score on raw inputs still can't reproduce something like an RBF kernel. What saves us is that a layer's inputs aren't raw. Earlier layers have already computed nonlinear features, so the inner product only has to work on top of them. That's why I treat the kernel connection as an intuition rather than an equivalence.
 
 ## Why softmax?
 
-Softmax has the form $\mathrm{softmax}(z)_i = \exp(z_i) / \sum_j \exp(z_j)$. It does two things at once: it exponentiates, and it normalizes the result to the probability simplex. The simplex is a geometric space where every point represents a valid probability distribution over a set of mutually exclusive outcomes. The two steps deserve separate analysis.
+Softmax has the form $\mathrm{softmax}(z)_i = \exp(z_i) / \sum_j \exp(z_j)$. It does two things at once: it exponentiates, and it normalizes the result to the probability simplex. The simplex is a geometric space where every point represents a valid probability distribution over a set of mutually exclusive outcomes. It's worth looking at the two separately.
 
 ### The exp part: maximum entropy
 
@@ -90,10 +90,10 @@ The third property is a choice and one could have chosen a different inductive b
 
 ## Just won't die
 
-An alternative architecture that also has [dim-preservation properties](https://anuragxel.github.io/blog/transformer-no-bottleneck/) and the [soft-k-NN behavior](https://anuragxel.github.io/blog/transformer-soft-knn/) to emulate a soft lookup has to make three more decisions. The kernel connection motivates inner-product scores without making them necessary. Non-softmax aggregation can change whether the per-head output is a convex combination of the values. This combination may help explain the transformer's versatility across modalities and tasks. If I tie $W_Q = W_K$, there is a tradeoff: fewer parameters, but the learned score can no longer distinguish A looking for B from B looking for A.
+An alternative architecture that keeps the [dim-preservation property]({% post_url 2026-05-03-transformer-no-bottleneck %}) and the [soft $k$-NN behavior]({% post_url 2026-05-03-transformer-soft-knn %}) still has to make three more decisions. It can tie $W_Q = W_K$ and save parameters, but then the score can't tell A looking for B apart from B looking for A. It can swap the inner product for some other score, since the kernel connection motivates inner products without making them necessary. And it can drop softmax, at the cost of the per-head output no longer being a convex combination of the values. I think the transformer's particular set of answers is a big part of why it's so versatile across modalities and tasks.
 
 There is still one loose end in this picture. If attention behaves like a non-parametric lookup, where do all the learned parameters fit in? In the [last post]({% post_url 2026-09-12-transformer-projectors-vs-projections %}), we'll separate the weights from the activations and look at what that distinction lets us do.
 
-## References
+# References
 
 {% bibliography --cited %}

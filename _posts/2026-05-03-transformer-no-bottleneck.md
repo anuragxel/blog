@@ -13,7 +13,7 @@ He responded, "I suppose, but it's hard to tell what the real reasons are for wh
 
 I hated my own hand-waviness and decided to systematize what I know. There are several architectural properties that, taken together, make transformers hard to displace, and this is the first in a four-part series unpacking them. The simplest, and the topic of this post, is that the architecture preserves token dimensionality at every layer, and retains a growing set of tokens rather than forcing the context into a fixed-size summary.
 
-I want a way to think through what we keep or give up when we change an architecture. We'll start with where the information goes as the model processes its input.
+I wanted a way to think through what we keep or give up when we swap out an architecture, so let's start with where the information goes as the model processes its input.
 
 ## Self-attention and cross-attention
 
@@ -57,7 +57,7 @@ The biggest question is: why is almost any concept or modality so easy to conver
 
 Consider a standard ViT-B/16 {% cite dosovitskiy2021image %}. Each $16 \times 16$ RGB patch is $16 \times 16 \times 3 = 768$ floats. We linearly project each one to a $d = 768$-dimensional token, giving a set of $N$ tokens to feed into a stack of self-attention operations {% cite vaswani2017attention %}. Given $N$ input tokens, each self-attention layer outputs $N$ tokens of the same dimension.
 
-Here is the key observation. Across blocks, the architecture preserves token dimensionality. The output of the multi-head self-attention block sits in $\mathbb{R}^{N \times d}$, exactly like the input (each head projects values to $d_v = d/h$, but the $h$ heads are concatenated and re-projected by $W_O$ back to $d$, so the block is dim-preserving even though individual heads are not). There is no architectural bottleneck through which all $N$ tokens must be projected to a lower-dimensional space or to a small number of vectors (i.e., tokens). The block retains room for every coordinate of $X$, with residual connections providing a direct path for carrying information forward. This does not guarantee information preservation. The key distinction from a fixed-state recurrence is retaining individually addressable tokens.
+The key observation is that the architecture preserves token dimensionality across blocks. The output of the multi-head self-attention block sits in $\mathbb{R}^{N \times d}$, exactly like the input (each head projects values to $d_v = d/h$, but the $h$ heads are concatenated and re-projected by $W_O$ back to $d$, so the block is dim-preserving even though individual heads are not). There is no architectural bottleneck through which all $N$ tokens must be projected to a lower-dimensional space or to a small number of vectors (i.e., tokens). The block retains room for every coordinate of $X$, and residual connections give information a direct path forward. That doesn't guarantee the information is preserved, but unlike a fixed-state recurrence, every token stays individually addressable.
 
 Contrast this with a state-space model like Mamba {% cite gu2024mamba %}, whose forward pass is a recurrence (shown here for the linear/time-invariant case)
 
@@ -77,7 +77,7 @@ The recurrence $h_t = f(h_{t-1}, x_t)$ is intrinsically ordered, so $h_t$ summar
 
 ## Won't die
 
-Avoiding fixed-size context bottlenecks may be an important advantage for architectures competing with transformers on generality {% cite jelassi2024repeat %}. For me, this suggests a concrete question when compressing context: what remains individually retrievable, and what must a summary preserve?
+I think avoiding fixed-size context bottlenecks is a big advantage for anything competing with transformers on generality {% cite jelassi2024repeat %}. Whenever someone compresses context now, the question I ask is: what stays individually retrievable, and what does the summary have to preserve?
 
 Keeping the tokens around is only part of the story. We also need a useful way to look things up among them. The [next post]({% post_url 2026-05-03-transformer-soft-knn %}) looks at how attention retrieves from that reference set, through the lens of soft $k$-NN.
 

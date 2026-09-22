@@ -4,7 +4,7 @@ title: Understanding PCA as an Optimization Problem
 ---
 
 ## Why?
-I’m usually miffed at the hand-waviness in explanations of PCA that go from covariance maximization to the algorithm. Here, we’ll see it purely as an optimization problem and derive the simple algorithm.
+I’m usually miffed at the whole covariance-maximization-to-the-algorithm hand-waviness that goes on when talking about PCA. Here, we’ll see it purely as an optimization problem and derive the simple algorithm.
 
 ## PCA: Problem Statement
 Let’s assume that we have a set of zero-centred samples $X = \{x_{1}, x_{2}, .. x_{n}\}^{T}$ all of dimensionality $d$.  We wish to transform these vectors to a lower-dimensional space $X^{\prime} = \{ x^{\prime}\_{1}, x^{\prime}\_{2} ,... x^{\prime}\_{n} \}^{T}$ of size, say, $k$, such that $k \lt\lt d$. We wish to perform this dimensionality reduction using a linear transformation $P$ such that
@@ -24,9 +24,9 @@ There are two ways of defining the optimization problem of PCA. We’ll look at 
 
 ### Reconstruction Loss Minimization
 
-Consider how to reconstruct $x$ from its projection. Since $P$ is rectangular ($k \times d$ with $k < d$), it has no true inverse. We require $P$ to have orthonormal rows, so $P P^{T} = I_{k}$, and $P^{T}$ acts as the right pseudoinverse that maps a low-dimensional code back into $\mathbb{R}^{d}$.
+Now, how do we get $x$ back from its projection? $P$ is $k \times d$ with $k < d$, so it has no true inverse. But $P$ is essentially a set of directions we project onto, so we can take those directions to be orthonormal, i.e., $P P^{T} = I_{k}$. Then $P^{T}$ acts as a right pseudoinverse and maps a low-dimensional code back into $\mathbb{R}^{d}$.
 
-For some vector $x$, the projection is $x^{\prime} = Px$. Thus, the reconstructed $x$, which we’ll call $\hat{x}$, would be
+For some vector $x$, the projection is $x^{\prime} = Px$. Thus, the reconstructed $x$, let’s call it $\hat{x}$, would be
 
 $$ \hat{x} = P^{T} x^{\prime}$$
 
@@ -36,19 +36,19 @@ It’s now apparent that we wish to minimize the reconstruction loss incurred be
 
 $$ \mathbf{min} \quad || x − \hat{x} || $$
 
-However, for simplicity, **let’s assume we wish to find just one direction, which we’ll call $p$**. We’ll get rid of this assumption later. Also, we will use the whole dataset instead of one sample. Thus, we can formulate the following optimization problem:
+However, for simplicity, **let’s assume we wish to find just one direction, let’s call it $p$**. We’ll get rid of this assumption later. Also, we will use the whole dataset instead of one sample. Thus, we can formulate the following optimization problem:
 
 $$ \mathbf{min} \quad || X - (Xp)p^{T} || $$
 
 $$ s.t. \quad\quad p^{T}p = 1 $$
 
-Convince yourself that this is equivalent to the reconstruction loss mentioned above. The constraint makes $p$ a unit vector, so $(Xp)p^{T}$ is an orthogonal projection. Scaling $p$ changes this reconstruction, so the normalization matters.
+Convince yourself that this is equivalent to the reconstruction loss mentioned above. Also, the constraint just says $p$ should be a unit vector, so that $(Xp)p^{T}$ is an orthogonal projection (scale $p$ and the reconstruction changes).
 
 ### Covariance Maximization
 
 The other way of looking at PCA is to find the best set of directions such that the variability of the data is maximized in the lower-dimensional space (this is what we usually see).
 
-Why is this a good idea? Because **the direction with the maximum variance preserves the most information about the data after projection**, in the sense that low-variance directions are nearly constant and contribute little to reconstruction. (Convince yourself by imagining a distribution of students with a variable (say their grade) that never changes. That direction carries no information and dropping it loses nothing.) Note that this is a reconstruction argument, not a class-discriminability one. PCA is unsupervised and does not in general align with class boundaries. That’s what LDA is for.
+Why is this a good idea? Because **the direction with the maximum variance preserves the most information about the data after projection**. (Convince yourself by imagining a distribution of students with a variable (say their grade) that never changes. That direction tells you nothing about any student, and dropping it loses nothing.) Note that “information” here means reconstruction, and not how well you can tell classes apart. PCA is unsupervised and doesn’t care about class boundaries (that’s what LDA is for).
 
 Say $X^{\prime} = Xp$ where $p$ is that direction of maximum variance. Thus, we can write the optimization as follows:
 
@@ -101,15 +101,15 @@ $$ = \mathbf{max} \quad p^{T}X^{T}Xp \quad s.t. \quad p^{T}p = 1 $$
 
 $$ = \mathbf{max} \quad p^{T}Sp \quad s.t. \quad p^{T}p = 1 $$
 
-Honestly, I’m much more convinced by looking for the direction with the lowest reconstruction loss than by looking at it as a covariance maximization problem.
+Honestly, the lowest-reconstruction-loss view convinces me much more than the covariance maximization one.
 
 ## Deriving the Algorithm
 
-The beauty of this optimization is that it’s an eigenvector-eigenvalue problem. Let’s see how. Let’s start with the second formulation:
+The beauty of this optimization is that it’s an eigenvector-eigenvalue problem. Let’s see how, starting with the second formulation:
 
 $$ \mathbf{max} \quad p^{T}Sp \quad s.t. \quad p^{T}p = 1 $$
 
-Now, we use Lagrangian multipliers to convert this constrained optimization problem into an unconstrained optimization problem.
+Now, we use Lagrange multipliers to turn this constrained problem into an unconstrained one.
 
 $$ \mathbf{max} \quad p^{T}Sp - \lambda(p^{T}p - 1) $$
 
@@ -127,7 +127,7 @@ $$ \frac{\partial L}{\partial p} = 0 $$
 
 $$ \Longrightarrow \quad 2Sp - 2\lambda p = 0  \quad \Longrightarrow \quad Sp = \lambda p $$
 
-Using both equations and substituting into $L(p, \lambda)$,
+Plugging both back into $L(p, \lambda)$,
 
 $$ L(p, \lambda) = p^{T}(Sp) - \lambda(p^{T}p - 1) $$
 
