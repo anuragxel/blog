@@ -116,7 +116,7 @@ Changing the mesh configuration thus changes the distribution of the same arrays
 
 ### A four-device walkthrough
 
-We can see the same placement rules in the figures below using two hosts with two devices each. The code above uses 256 devices. Here, DP becomes `(4, 1, 1)`, DP + FSDP becomes `(2, 2, 1)`, and DP + TP becomes `(2, 1, 2)`. The partition specs stay the same.
+We can see the same placement rules visually using two hosts with two devices each. Here, DP is `(4, 1, 1)`, DP + FSDP is `(2, 2, 1)`, and DP + TP is `(2, 1, 2)`. The partition specs stay the same.
 
 To draw the arrays, we use `batch = 8`, `width = 4`, and `hidden = 6`. Each grid cell represents one scalar.
 
