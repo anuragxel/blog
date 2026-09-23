@@ -1,5 +1,9 @@
-"""ImageFolder discovery and deterministic, per-sample CPU augmentations."""
+"""ImageFolder discovery and deterministic, per-sample CPU augmentations.
+
+Loaders return uint8 pixels, which are 4x cheaper to pass between processes;
+`normalize_pixels` converts them on whichever device holds the batch."""
 import math
+from collections import deque
 from pathlib import Path
 
 import numpy as np
@@ -66,11 +70,21 @@ def random_crop(
     return image.resize((size, size), Image.Resampling.BICUBIC)
 
 
-def normalized_pixels(
-    image,
+def normalize_pixels(
+    pixels,
 ):
-    pixels = np.asarray(image, dtype=np.float32) / 255
-    return (pixels - IMAGE_MEAN) / IMAGE_STD
+    """uint8 pixels to standardized floats; accepts NumPy or JAX arrays."""
+    return (pixels / 255 - IMAGE_MEAN) / IMAGE_STD
+
+
+def open_rgb(
+    path,
+    min_side,
+):
+    """Let the JPEG decoder downscale by up to 8x while keeping both sides >= min_side."""
+    with Image.open(path) as image:
+        image.draft("RGB", (min_side, min_side))
+        return image.convert("RGB")
 
 
 def augment(
@@ -91,7 +105,7 @@ def augment(
         image = image.filter(ImageFilter.GaussianBlur(rng.uniform(0.1, 2.)))
     if rng.random() < 0.1:
         image = ImageOps.solarize(image)
-    return normalized_pixels(image)
+    return np.asarray(image, dtype=np.uint8)
 
 
 def load_views(
@@ -100,9 +114,17 @@ def load_views(
 ):
     path, seed = item
     rng = np.random.default_rng(seed)
-    with Image.open(path) as image:
-        image = image.convert("RGB")
-        return np.stack([augment(image, size, rng) for _ in range(2)])
+    # The smallest crop covers about 0.55 of a side, so keep 2x the output size.
+    image = open_rgb(path, 2 * size)
+    return np.stack([augment(image, size, rng) for _ in range(2)])
+
+
+def load_view_batch(
+    items,
+    size,
+):
+    """One worker task: (path, seed) pairs to uint8 views shaped (2, b, h, w, c)."""
+    return np.stack([load_views(item, size) for item in items], axis=1)
 
 
 def load_eval_image(
@@ -110,10 +132,39 @@ def load_eval_image(
     size,
 ):
     """Resize the shorter side, then center-crop without random augmentation."""
-    with Image.open(path) as image:
-        image = image.convert("RGB")
-        scale = round(size / 0.875) / min(image.size)
-        resized = tuple(round(dimension * scale) for dimension in image.size)
-        image = image.resize(resized, Image.Resampling.BICUBIC)
-        left, top = (image.width - size) // 2, (image.height - size) // 2
-        return normalized_pixels(image.crop((left, top, left + size, top + size)))
+    image = open_rgb(path, round(size / 0.875))
+    scale = round(size / 0.875) / min(image.size)
+    resized = tuple(round(dimension * scale) for dimension in image.size)
+    image = image.resize(resized, Image.Resampling.BICUBIC)
+    left, top = (image.width - size) // 2, (image.height - size) // 2
+    return np.asarray(image.crop((left, top, left + size, top + size)), dtype=np.uint8)
+
+
+def load_eval_batch(
+    paths,
+    size,
+):
+    return np.stack([load_eval_image(path, size) for path in paths])
+
+
+def chunked(
+    items,
+    size,
+):
+    return [items[start:start + size] for start in range(0, len(items), size)]
+
+
+def prefetched(
+    pool,
+    load,
+    batches,
+    depth,
+):
+    """Load each batch's chunks in worker processes, `depth` batches ahead; yield in order."""
+    pending = deque()
+    for chunks in batches:
+        pending.append([pool.submit(load, chunk) for chunk in chunks])
+        if len(pending) > depth:
+            yield [future.result() for future in pending.popleft()]
+    while pending:
+        yield [future.result() for future in pending.popleft()]

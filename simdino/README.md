@@ -67,9 +67,9 @@ python evaluate.py \
   --val /longdata/anurag_storage/imagenet/ILSVRC/Data/CLS-LOC/val
 ```
 
-The subset is the first ten sorted class folders and the first sixteen images in each. Each update samples a batch without replacement from that subset; samples can reappear on subsequent updates. Augmentation randomness is indexed by seed and step. The runner uses threads for CPU image decoding and augmentation, and synchronizes each step for straightforward logging.
+The subset is the first ten sorted class folders and the first sixteen images in each. Each update samples a batch without replacement from that subset; samples can reappear on subsequent updates. Augmentation randomness is indexed by seed and step. `--workers` separate processes decode and augment images, loading `--prefetch` batches ahead of training. They return uint8 pixels, which are normalized on the GPU. Metrics are read from the device every `--log-every` steps rather than every step. Each line in `metrics.jsonl` records the average step time over its logging window.
 
-Outputs are `initial.pkl`, `last.pkl`, `config.json`, and `metrics.jsonl`. Checkpoints are written every 100 steps and at the end. Resume an interrupted run with the same arguments plus `--resume runs/my-cpu-smoke/last.pkl`; the optimizer, step, schedule, and per-step augmentation seeds continue. Load only trusted local pickle checkpoints. To compare initial and final features after resuming, retain the original run directory containing `initial.pkl`.
+Outputs are `initial.pkl`, `last.pkl`, `config.json`, and `metrics.jsonl`. Checkpoints are written every `--save-every` steps (default 100) and at the end. Resume an interrupted run with the same arguments plus `--resume runs/my-cpu-smoke/last.pkl`; the optimizer, step, schedule, and per-step augmentation seeds continue. Load only trusted local pickle checkpoints. To compare initial and final features after resuming, retain the original run directory containing `initial.pkl`.
 
 ## ViT-S on 5,000 ImageNet images
 
@@ -127,6 +127,21 @@ taskset -c 0-7 bash run_imagenet_50k.sh > runs/imagenet-gpu-vits-50k.log 2>&1
 
 After an interruption, use the same launcher with
 `--resume runs/imagenet-gpu-vits-50k/last.pkl`.
+
+## ViT-S on all of ImageNet on one 8-GPU node
+
+`bash run_imagenet_full.sh` trains on all 1,281,167 training images for 100
+epochs, then evaluates 1-NN with 100 references per class against the full
+50,000-image validation set. It is written for 8 V100s: it runs in fp32,
+since V100 has no bf16 tensor cores. The defaults are 64 images per GPU
+(global batch 512), a learning rate of 5e-4 per 256 images, and 10 warmup
+epochs. It uses all but four CPU cores as loader processes.
+
+Environment variables override the defaults: `SIMDINO_GPUS`, `SIMDINO_PER_GPU`,
+`SIMDINO_EPOCHS`, `SIMDINO_WORKERS`, `SIMDINO_DATA`, `SIMDINO_RUN`, and
+`SIMDINO_PYTHON`. Extra arguments go to `run.py`; after an interruption, pass
+`--resume runs/imagenet-full-vits/last.pkl`. If the logged `images_per_second`
+stays flat as you add GPUs, the loader is the bottleneck; add workers.
 
 ## What this implements
 

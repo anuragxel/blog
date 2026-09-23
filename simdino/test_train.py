@@ -113,7 +113,7 @@ def test_ema_checkpoint_and_deterministic_views(
     Image.fromarray(pixels).save(image)
     a, b = load_views((image, 42), trainer.config.size), load_views((image, 42), trainer.config.size)
     np.testing.assert_array_equal(a, b)
-    assert a.shape == (2, 16, 16, 3) and a.dtype == np.float32
+    assert a.shape == (2, 16, 16, 3) and a.dtype == np.uint8
     assert not np.array_equal(a[0], a[1])
 
 
