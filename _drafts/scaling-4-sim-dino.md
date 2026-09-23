@@ -1,541 +1,210 @@
 ---
 layout: post
 title: "Pretrain a vision model from scratch. Step 4: Write SimDINO in JAX"
-description: Implementing SimDINO in JAX.
+description: Two parameter trees, two update rules, and one loss that couples the whole batch.
 ---
 
-In the previous posts, we covered the [major families of self-supervised learning]({% post_url 2026-09-18-scaling-1-visual-ssl %}), saw that [distributed scaling is just placement of arrays across devices]({% post_url 2026-09-18-scaling-2-parallelism %}), and [wrote those strategies in JAX]({% post_url 2026-09-19-scaling-3-why-jax-is-cool %}). Now let's put those mental models to work and implement a self-supervised learning algorithm that can actually be scaled.
+This is the last part of a four-part series on scaling up model (pre-)training. We covered the [major families of visual SSL]({% post_url 2026-09-18-scaling-1-visual-ssl %}), saw that [distributed training is mostly placement of arrays plus a handful of MPI collectives]({% post_url 2026-09-18-scaling-2-parallelism %}), and [wrote those placements in JAX]({% post_url 2026-09-19-scaling-3-why-jax-is-cool %}). Now let's put all of it to work on an actual self-supervised method, SimDINO {% cite wu2025simplifying %}.
 
-The algorithm is SimDINO {% cite wu2025simplifying %}, the self-distillation method from the [Visual SSL post]({% post_url 2026-09-18-scaling-1-visual-ssl %}#simdino-deleting-the-training-stability-tricks). Quick recap: like DINO, it aligns student and teacher embeddings over two augmented views of the same image, and the teacher is an exponential moving average of the student. Unlike DINO, it drops the stability tricks and adds a coding-rate regularizer to discourage collapse.
+I'm not going to walk through the ViT. It's a standard ViT, and you've seen a hundred of them (the full code is in the companion repo). What I want to show is the training loop, because that's where SimDINO gets interesting. Stripped down, a SimDINO step has:
 
-For this example, we'll use two global crops per image. Let $Z_s^{(v)}, Z_t^{(v)} \in \mathbb{R}^{B \times d}$ be their normalized embeddings, with views $v \in \{1,2\}$. Match opposite views and average the coding rate over the student views:
+1. **Two parameter trees**, a student and a teacher, with the same structure.
+2. **Two update rules.** The student follows the gradient, and the teacher follows the student.
+3. **One gradient boundary.** Gradients flow into the student and never into the teacher.
+4. **One loss that couples the whole batch**, through the coding rate.
 
-$$\mathcal{L}_{\mathrm{align}} = \frac{1}{2B}\sum_{i=1}^{B}\left[1-\langle z_{s,i}^{(1)},z_{t,i}^{(2)}\rangle + 1-\langle z_{s,i}^{(2)},z_{t,i}^{(1)}\rangle\right],$$
+Each of these turns out to be a line or two of JAX. The fourth one is also where everything from parts 2 and 3 comes back to bite us, so it gets the most attention.
 
-$$R(Z) = \frac{1}{2}\log\det\!\left(I + \frac{d}{B\epsilon^2}Z^TZ\right), \qquad \mathcal{L}=\mathcal{L}_{\mathrm{align}}-\frac{\gamma}{2}\left[R(Z_s^{(1)})+R(Z_s^{(2)})\right].$$
+## SimDINO, again, but with intuition
 
-Unit normalization matters here, since otherwise the model could crank up the rate just by scaling up its embeddings. Here $\epsilon$ is the distortion scale and $\gamma$ sets the regularizer's strength.
+Recall from part 1 that DINO {% cite caron2021emerging %} matches a student to an EMA teacher across crops, and that it avoids collapse through a fragile balancing act between centering and sharpening. SimDINO throws out that machinery (along with the prototypes and the softmax) and does two things instead.
 
-## The model, in house style
+The first is to pull the student's embedding of one crop toward the teacher's embedding of the *other* crop. With two global crops per image and unit-normalized embeddings $z$, this is just a cosine distance:
 
-Parameters are a pytree, here a dictionary of arrays plus a list of per-block dictionaries. A `ViT` class holds only the architecture configuration, and its `apply` method takes the weights explicitly.
+$$\mathcal{L}_{\mathrm{align}} = 1 - \frac{1}{2B}\sum_{i=1}^{B}\left[\langle z_{s,i}^{(1)},z_{t,i}^{(2)}\rangle + \langle z_{s,i}^{(2)},z_{t,i}^{(1)}\rangle\right]$$
 
-The array operations name the dimensions they act on:
+On its own, this collapses immediately, since mapping every image to the same point gives perfect alignment. So the second thing is to add a direct penalty on collapse, the coding rate {% cite yu2020learning %} of the student's embeddings:
+
+$$R(Z) = \frac{1}{2}\log\det\!\left(I + \frac{d}{\epsilon^2}\,C\right), \qquad C = \frac{1}{B} Z^{T} Z \in \mathbb{R}^{d \times d}, \qquad \mathcal{L} = \mathcal{L}_{\mathrm{align}} - \gamma \, \overline{R}$$
+
+where $Z \in \mathbb{R}^{B \times d}$ stacks one view's embeddings, $\overline{R}$ averages the rate over the two student views, and $\gamma$ sets the regularizer's strength.
+
+The way I think about $R$ is through the eigenvalues $\mu_1, \ldots, \mu_d$ of the second moment $C$:
+
+$$R = \frac{1}{2}\sum_{j=1}^{d} \log\!\left(1 + \frac{d}{\epsilon^2}\mu_j\right), \qquad \sum_j \mu_j = \mathrm{tr}(C) = \frac{1}{B}\sum_i \lVert z_i \rVert^2 = 1.$$
+
+Because the embeddings are unit-normalized, the total "energy" $\sum_j \mu_j$ is fixed at one. The only freedom left is how that energy is split across directions. $\log$ is concave, so the rate is maximized by spreading the energy evenly ($\mu_j = 1/d$) and minimized by piling it into one direction, which is exactly what collapse looks like. This is also why normalization isn't optional. Without it, the model could raise the rate just by making its embeddings longer.
+
+So alignment pulls the views of each image together, and the rate pushes the whole cloud of images apart. Note that $C$ depends on *every* image in the batch. That one fact is going to matter a lot once we shard.
+
+## The model is just a function
+
+In JAX, the ViT is a pytree of weights plus a pure function. The only interface the training loop needs is this:
 
 ```python
-def normalize(
-    z: Float[Array, "*b d"],
-) -> Float[Array, "*b d"]:
-    """Unit-length embeddings, with normalization computed in fp32."""
-    z = z.astype(jnp.float32)
-    squared_norms = einx.sum("... [d] -> ... 1", z * z)
-    norms = jnp.sqrt(squared_norms)
-    norms = jnp.maximum(norms, 1e-8)
-    return z / norms
-
-
-def layer_norm(
-    x: Float[Array, "*b d"],
-    parameters: PyTree,
-) -> Float[Array, "*b d"]:
-    # Accumulate statistics in fp32 even when the surrounding layers use bf16.
-    values = x.astype(jnp.float32)
-    mean = einx.mean("... [d] -> ... 1", values)
-    variance = einx.var("... [d] -> ... 1", values)
-    inverse_std = jax.lax.rsqrt(variance + 1e-6)
-    normalized = (values - mean) * inverse_std
-    output = normalized * parameters["scale"] + parameters["bias"]
-    return output.astype(x.dtype)
-
-
-def linear(
-    x: Float[Array, "*b d"],
-    weight: Float[Array, "d e"],
-) -> Float[Array, "*b e"]:
-    weight = weight.astype(x.dtype)
-    return einx.dot("... [d], [d] e -> ... e", x, weight)
-
-
-def split_qkv(
-    qkv: Array,
-    heads: int,
-) -> tuple[Array, Array, Array]:
-    query, key, value = einx.rearrange(
-        "b t (qkv heads d) -> qkv b t heads d", qkv, qkv=3, heads=heads,
-    )
-    return query, key, value
-
-
-def merge_heads(
-    attended: Float[Array, "b t heads d"],
-) -> Float[Array, "b t width"]:
-    return einx.rearrange("b t heads d -> b t (heads d)", attended)
-
-
-def attention(
-    x: Float[Array, "b t d"],
-    parameters: PyTree,
-    heads: int,
-) -> Float[Array, "b t d"]:
-    qkv = linear(x, parameters["qkv"])
-    query, key, value = split_qkv(qkv, heads)
-    attended = jax.nn.dot_product_attention(query, key, value)
-    attended = merge_heads(attended)
-    return linear(attended, parameters["out"])
-
-
-def mlp(
-    x: Float[Array, "*b d"],
-    up: Float[Array, "d hidden"],
-    down: Float[Array, "hidden e"],
-) -> Float[Array, "*b e"]:
-    hidden = linear(x, up)
-    hidden = jax.nn.gelu(hidden)
-    return linear(hidden, down)
-
-
-def projection_head(
-    features: Float[Array, "b d"],
-    parameters: PyTree,
-) -> Array:
-    return mlp(features, parameters["head1"], parameters["head2"])
-
-
-def patchify(
-    images: Float[Array, "b h w c"],
-    patch_size: int,
-) -> Float[Array, "b t patch"]:
-    return einx.rearrange(
-        "b (h ph) (w pw) c -> b (h w) (ph pw c)", images,
-        ph=patch_size, pw=patch_size,
-    )
-
-
-def add_cls_and_positions(
-    tokens: Float[Array, "b t d"],
-    parameters: PyTree,
-) -> Array:
-    cls = parameters["cls"].astype(tokens.dtype)
-    positions = parameters["pos"].astype(tokens.dtype)
-    tokens = einx.rearrange("1 1 d, b t d -> b (1 + t) d", cls, tokens)
-    return tokens + positions
-
-
-def cls_token(
-    tokens: Float[Array, "b t d"],
-) -> Float[Array, "b d"]:
-    cls, _ = einx.rearrange("b (1 + t) d -> b d, b t d", tokens)
-    return cls
-
-
-def transformer_block(
-    x: Float[Array, "b t d"],
-    weights: PyTree,
-    heads: int,
-) -> Array:
-    normalized = layer_norm(x, weights["n1"])
-    x = x + attention(normalized, weights, heads)
-    normalized = layer_norm(x, weights["n2"])
-    x = x + mlp(normalized, weights["up"], weights["down"])
-    return x
+def encode_views(
+    params: PyTree, views: Float[Array, "2 b h w c"]
+) -> Float[Array, "2 b d"]:
+    """Unit-normalized embeddings for both crops of every image."""
 ```
 
+Since the teacher and the student have the same architecture, the same function encapsulates both networks. We just input different `param` trees for student and teacher networks.
+
+## Two trees, one state
+
+The whole training state is a named tuple:
+
 ```python
-@dataclass(frozen=True)
-class ViT:
-    """Architecture only: weights are explicit inputs, never hidden mutable state."""
-    config: Config
+class State(NamedTuple):
+    student: PyTree
+    teacher: PyTree
+    opt_state: optax.OptState
+    step: Int[Array, ""]
 
-    def init(
-        self,
-        key: Array,
-    ) -> PyTree:
-        config = self.config
-        keys = jax.random.split(key, 4 + 4 * config.depth)
-        keys = iter(keys)
-        width = config.width
 
-        def weight(
-            inputs,
-            outputs,
-        ):
-            key = next(keys)
-            values = jax.random.normal(key, (inputs, outputs))
-            return values / math.sqrt(inputs)
-
-        def norm(
-        ):
-            return {"scale": jnp.ones(width), "bias": jnp.zeros(width)}
-
-        # All trainable leaves, including normalization, belong to this one pytree.
-        embedding = weight(3 * config.patch**2, width)
-        num_tokens = (config.size // config.patch)**2 + 1
-        position_key = next(keys)
-        positions = 0.02 * jax.random.normal(position_key, (1, num_tokens, width))
-        blocks = []
-        for _ in range(config.depth):
-            blocks.append({
-                "qkv": weight(width, 3 * width),
-                "out": weight(width, width),
-                "up": weight(width, 4 * width),
-                "down": weight(4 * width, width),
-                "n1": norm(),
-                "n2": norm(),
-            })
-        return {
-            "embed": embedding,
-            "pos": positions,
-            "cls": jnp.zeros((1, 1, width)),
-            "norm": norm(),
-            "blocks": blocks,
-            "head1": weight(width, 4 * width),
-            "head2": weight(4 * width, config.dim),
-        }
-
-    def embed_patches(
-        self,
-        parameters: PyTree,
-        images: Float[Array, "b h w c"],
-    ) -> Array:
-        dtype = jnp.bfloat16 if self.config.bf16 else jnp.float32
-        patches = patchify(images, self.config.patch)
-        patches = patches.astype(dtype)
-        return linear(patches, parameters["embed"])
-
-    def encode(
-        self,
-        parameters: PyTree,
-        images: Float[Array, "b h w c"],
-    ) -> Float[Array, "b d"]:
-        tokens = self.embed_patches(parameters, images)
-        tokens = add_cls_and_positions(tokens, parameters)
-        for weights in parameters["blocks"]:
-            tokens = transformer_block(tokens, weights, self.config.heads)
-        tokens = layer_norm(tokens, parameters["norm"])
-        return cls_token(tokens)
-
-    def apply(
-        self,
-        parameters: PyTree,
-        images: Float[Array, "b h w c"],
-        backbone: bool = False,
-    ) -> Float[Array, "b d"]:
-        features = self.encode(parameters, images)
-        if backbone:
-            return normalize(features)
-        embeddings = projection_head(features, parameters)
-        return normalize(embeddings)
-
-    def encode_views(
-        self,
-        parameters: PyTree,
-        views: Float[Array, "2 b h w c"],
-    ) -> Float[Array, "2 b d"]:
-        images = einx.rearrange("v b h w c -> (v b) h w c", views)
-        embeddings = self.apply(parameters, images)
-        return einx.rearrange("(v b) d -> v b d", embeddings, v=2)
+def init_state(key, model, optimizer) -> State:
+    params = model.init(key)
+    # Same values, two trees. JAX arrays are immutable, so nothing is tied.
+    return State(params, params, optimizer.init(params), jnp.array(0))
 ```
 
-Note that the embedding has dimension `config.dim`, instead of DINO's thousands of prototypes. For downstream evaluation, `backbone=True` returns the normalized CLS representation before the projection head. As promised in the last post, `einx` names the axes for every contraction, reduction, and rearrangement, and intermediate results get their own names so you can read each operation on its own.
+## The loss, and the gradient boundary
 
-## The loss, and where stop-gradient lives
-
-The trainer creates two model instances with the same architecture. Their weights live in a separate `State` pytree, so the student and teacher can follow different update rules. `Trainer` itself only holds the configuration and the optimizer, never mutable training weights:
+The coding rate goes through the Cholesky factor. The matrix $I + \frac{d}{\epsilon^2} C$ is positive definite thanks to the identity, and if $A = LL^{T}$, then $\frac{1}{2}\log\det A = \sum_j \log L_{jj}$:
 
 ```python
-class Trainer:
-    def __init__(
-        self,
-        config: Config,
-    ):
-        self.config = config
-        self.student = ViT(config)
-        self.teacher = ViT(config)
-        schedule = optax.warmup_cosine_decay_schedule(
-            init_value=0., peak_value=config.lr,
-            warmup_steps=min(config.warmup, config.steps - 1),
-            decay_steps=config.steps, end_value=config.lr * 0.01,
-        )
-        # Decay matrix weights, but not CLS, positions, or normalization vectors.
-        def decay_mask(
-            parameters,
-        ):
-            return jax.tree.map(lambda x: x.ndim == 2, parameters)
+def second_moment(z: Float[Array, "v b d"]) -> Float[Array, "v d d"]:
+    return einx.dot("v [b] d, v [b] e -> v d e", z, z) / z.shape[1]
 
-        self.optimizer = optax.chain(
-            optax.clip_by_global_norm(3.),
-            optax.adamw(schedule, weight_decay=config.wd, mask=decay_mask),
-        )
 
-    def init(
-        self,
-        key: Array,
-    ) -> State:
-        weights = self.student.init(key)
-        # JAX arrays are immutable; sharing initial values does not tie updates.
-        optimizer_state = self.optimizer.init(weights)
-        step = jnp.array(0, jnp.int32)
-        return State(weights, weights, optimizer_state, step)
+def rate_from_moment(moment: Float[Array, "v d d"], eps: float) -> Float[Array, ""]:
+    d = moment.shape[-1]
+    chol = jnp.linalg.cholesky(jnp.eye(d) + (d / eps**2) * moment)
+    log_diag = jnp.log(jnp.diagonal(chol, axis1=-2, axis2=-1))
+    return einx.sum("v [d]", log_diag).mean()  # mean over the two views
+
+
+def cross_view_alignment(z_s: Float[Array, "2 b d"], z_t: Float[Array, "2 b d"]):
+    # z_t[::-1] swaps the views, so crop 1 of the student meets crop 2 of the teacher.
+    return 1 - einx.dot("v b [d], v b [d] -> v b", z_s, z_t[::-1]).mean()
 ```
 
-The coding rate is computed from the second moment of the embeddings:
+I split `second_moment` out from `rate_from_moment` on purpose.
+
+The loss itself reads almost like an equation:
 
 ```python
-def second_moment(
-    z: Float[Array, "v b d"],
-) -> Float[Array, "v d d"]:
-    """One uncentered second-moment matrix per view, over the supplied batch."""
-    batch_size = z.shape[1]
-    moment = einx.dot("v [b] d, v [b] e -> v d e", z, z)
-    return moment / batch_size
+def loss_fn(student, teacher, views, model, config):
+    z_s = model.encode_views(student, views)
+    z_t = jax.lax.stop_gradient(model.encode_views(teacher, views))
 
-
-def coding_rate_from_moment(
-    moment: Float[Array, "v d d"],
-    eps: float,
-) -> Float[Array, ""]:
-    """Mean of 0.5 * logdet(I + dim / eps² * moment) across views."""
-    dimension = moment.shape[-1]
-    matrix = jnp.eye(dimension) + (dimension / eps**2) * moment
-    cholesky = jnp.linalg.cholesky(matrix)
-    diagonal = jnp.diagonal(cholesky, axis1=-2, axis2=-1)
-    log_diagonal = jnp.log(diagonal)
-    per_view = einx.sum("v [d] -> v", log_diagonal)
-    return per_view.mean()
-
-
-def coding_rate(
-    z: Float[Array, "v b d"],
-    eps: float,
-) -> Float[Array, ""]:
-    moment = second_moment(z)
-    return coding_rate_from_moment(moment, eps)
-```
-
-The matrix inside the determinant is positive definite because of the identity term. If $A=LL^T$ is its Cholesky factorization, $\tfrac12\log\det A=\sum_j\log L_{jj}$. The code uses that identity and computes the loss statistics in fp32, including when the ViT uses bf16.
-
-```python
-def cross_view_alignment(
-    student: Float[Array, "2 b d"],
-    teacher: Float[Array, "2 b d"],
-) -> Float[Array, ""]:
-    """Mean cosine distance between opposite crops of each image."""
-    opposite_views = teacher[::-1]
-    similarities = einx.dot("v b [d], v b [d] -> v b", student, opposite_views)
-    return 1 - similarities.mean()
-
-
-def feature_spread(
-    z: Float[Array, "v b d"],
-) -> Float[Array, ""]:
-    """Standard deviation across images, averaged over views and features."""
-    feature_std = einx.std("v [b] d -> v d", z)
-    return feature_std.mean()
-
-
-def loss(
-    self,
-    student_weights,
-    teacher_weights,
-    views: Float[Array, "2 b h w c"],
-):
-    student_z = self.student.encode_views(student_weights, views)
-    teacher_z = self.teacher.encode_views(teacher_weights, views)
-    teacher_z = jax.lax.stop_gradient(teacher_z)
-
-    alignment = cross_view_alignment(student_z, teacher_z)
-    rate = coding_rate(student_z, self.config.eps)
-    loss = alignment - self.config.gamma * rate
-    spread = feature_spread(student_z)
+    alignment = cross_view_alignment(z_s, z_t)
+    rate = rate_from_moment(second_moment(z_s), config.eps)
     metrics = {
-        "loss": loss,
         "alignment": alignment,
         "rate": rate,
-        "feature_std": spread,
+        # This goes to zero if every image maps to one point.
+        "feature_std": einx.std("v [b] d -> v d", z_s).mean(),
     }
-    return loss, metrics
+    return alignment - config.gamma * rate, metrics
 ```
 
-`views` has shape `(2, batch, height, width, channels)`, and both networks see both crops. `cross_view_alignment` pairs each student output with the teacher's output on the other crop. The first term of the loss rewards agreement, and the second rewards embeddings that spread out.
+In self-distillation, the teacher is a target. The loss is a function of three things, $\mathcal{L}(\theta_s, \theta_t, x)$, and we only ever take $\nabla_{\theta_s}\mathcal{L}$. While we take that derivative, the teacher's weights are held fixed. Instead, the teacher is updated via the EMA in the next section.
 
-Now for the first payoff: JAX differentiates with respect to exactly the arguments we name.
+## The training step
+
+Here is the whole step:
 
 ```python
-loss_and_grad = jax.value_and_grad(trainer.loss, argnums=0, has_aux=True)
-(_, metrics), gradients = loss_and_grad(
-    state.student_weights, state.teacher_weights, views,
+def teacher_momentum(step, config):
+    # Cosine ramp from config.momentum toward 1 over training.
+    progress = step / config.steps
+    return 1 - (1 - config.momentum) * (1 + jnp.cos(jnp.pi * progress)) / 2
+
+
+def train_step(state: State, views, model, optimizer, config):
+    grad_fn = jax.value_and_grad(loss_fn, argnums=0, has_aux=True)
+    (loss, metrics), grads = grad_fn(state.student, state.teacher, views, model, config)
+
+    # The student follows the gradient.
+    updates, opt_state = optimizer.update(grads, state.opt_state, state.student)
+    student = optax.apply_updates(state.student, updates)
+
+    # The teacher follows the student.
+    m = teacher_momentum(state.step, config)
+    teacher = jax.tree.map(lambda t, s: m * t + (1 - m) * s, state.teacher, student)
+
+    return State(student, teacher, opt_state, state.step + 1), metrics
+```
+
+The teacher update is the equation $\theta_t \leftarrow m\,\theta_t + (1-m)\,\theta_s$, applied to every weight. So the teacher is a running average of recent students, which makes it a slower and more stable target than the student itself (the same idea as in MoCo {% cite he2020momentum %} and BYOL {% cite grill2020bootstrap %}). As $m$ ramps toward one, the teacher changes less and less. Since the student and teacher are pytrees with the same structure, the equation is a simple `jax.tree.map`. Notice that `train_step` is also a pure function and it lets us perform sharding in the next section.
+
+## Sharding it is a placement decision
+
+Following part 3, we don't touch `train_step` to distribute it. We only say where the arrays live:
+
+```python
+mesh = jax.make_mesh((jax.device_count(),), ("data",))
+replicated = NamedSharding(mesh, P())
+# views is (view, batch, h, w, c): split the images and keep both crops of each together.
+batch_sharding = NamedSharding(mesh, P(None, "data"))
+
+def placement(x):
+    if mode == "fsdp" and x.ndim == 2 and x.shape[0] % mesh.size == 0:
+        return NamedSharding(mesh, P("data", None))
+    return replicated
+
+state_sharding = jax.tree.map(placement, state)
+step = jax.jit(
+    partial(train_step, model=model, optimizer=optimizer, config=config),
+    in_shardings=(state_sharding, batch_sharding),
+    out_shardings=(state_sharding, replicated),
 )
 ```
 
-That computes gradients for the student tree only, and `stop_gradient` makes the teacher boundary explicit inside the loss too. The coding rate stays differentiable, though, because stopping gradients through its batch statistic would remove exactly the pressure it's supposed to put on the student.
+With `mode = "dp"`, everything is replicated and only the batch is split. With `mode = "fsdp"`, the weight matrices (and their optimizer state) are split too, and the compiler gathers and reduce-scatters them as it goes {% cite rajbhandari2020zero zhao2023pytorch %}. Because the student and teacher leaves get identical placements, the EMA `tree.map` stays local to each shard and needs no communication at all.
 
-## The EMA teacher and the training step
+## The batch-coupled loss, where sharding meets math
 
-The second payoff is the teacher update. It touches every array in the parameter tree, but since both trees are plain values with identical structure, it's a single `tree.map`:
+Data parallelism, as we set it up in part 2, relies on one property of the loss. If the loss is a mean over examples and the shards are equally sized, then the average of the per-device losses is the global loss, and averaging the per-device gradients gives the global gradient. Each device can compute its loss on its own slice without ever looking at anyone else's data.
 
-```python
-def ema(
-    teacher_weights: PyTree,
-    student_weights: PyTree,
-    momentum: Array | float,
-) -> PyTree:
-    return jax.tree.map(
-        lambda teacher, student: momentum * teacher + (1 - momentum) * student,
-        teacher_weights, student_weights,
-    )
-```
+The alignment term has this property, but the coding rate doesn't. The rate is a function of the second moment $C$, which is a mean over the whole batch, and the log-determinant is applied *after* that mean. With $N$ devices, the global moment is the average of the local ones, $C = \frac{1}{N}\sum_p C_p$, so there are two different things we could compute:
 
-That's the entire momentum update, the same mechanism MoCo {% cite he2020momentum %} and BYOL {% cite grill2020bootstrap %} use. It returns a new teacher tree and leaves the old one alone.
+$$\underbrace{\frac{1}{N}\sum_{p=1}^{N}\log\det\!\left(I+\alpha C_p\right)}_{\text{average of local rates}} \;\le\; \underbrace{\log\det\!\left(I+\alpha\,\frac{1}{N}\sum_{p=1}^{N}C_p\right)}_{\text{rate of the global batch}}, \qquad \alpha = \frac{d}{\epsilon^2}$$
 
-The full training step composes the loss, optimizer, and EMA update:
+The inequality is Jensen's, since $\log\det$ is concave. The left side is what you get if every device computes the full loss on its own slice, the habit from plain data parallelism. That makes it a different objective, and one that depends on the number of devices. Take $d = 256$ and a global batch of 1024. On 64 devices, each device sees 16 images, so each $C_p$ has rank at most 16. Each local rate can then reward spreading across at most 16 of the 256 directions, however spread out the full batch is. Change the device count and you've changed the loss, without touching a line of it.
+
+In JAX, we get the right side by default. Under `jit`, arrays describe the global computation, so when `second_moment` contracts over `b`, it contracts over the global batch, even though each device only holds a slice. The compiler inserts the communication to make that true, typically an all-reduce of the local moments before the log-determinant. That's a `(2, d, d)` matrix, which is tiny next to the gradients we're all-reducing anyway.
+
+To see the collective explicitly, we can write the per-device code with `shard_map`, where `z_local` holds only the local batch. This is why we split `second_moment` from `rate_from_moment` earlier:
 
 ```python
-def teacher_momentum(
-    step: Array,
-    initial: float,
-    steps: int,
-) -> Array:
-    progress = step / steps
-    cosine_decay = (1 + jnp.cos(jnp.pi * progress)) / 2
-    return 1 - (1 - initial) * cosine_decay
+def global_rate(z_local, eps):
+    moment = jax.lax.pmean(second_moment(z_local), "data")
+    return rate_from_moment(moment, eps)
 
 
-def update_student(
-    self,
-    weights: PyTree,
-    optimizer_state: PyTree,
-    gradients: PyTree,
-):
-    updates, optimizer_state = self.optimizer.update(gradients, optimizer_state, weights)
-    weights = optax.apply_updates(weights, updates)
-    return weights, optimizer_state
-
-
-def update_teacher(
-    self,
-    teacher: PyTree,
-    student: PyTree,
-    step: Array,
-) -> PyTree:
-    momentum = teacher_momentum(step, self.config.momentum, self.config.steps)
-    return ema(teacher, student, momentum)
-
-
-def step(
-    self,
-    state: State,
-    views: Float[Array, "2 b h w c"],
-) -> tuple[State, dict]:
-    loss_and_grad = jax.value_and_grad(self.loss, argnums=0, has_aux=True)
-    (_, metrics), gradients = loss_and_grad(
-        state.student_weights, state.teacher_weights, views,
-    )
-    student, optimizer_state = self.update_student(
-        state.student_weights, state.optimizer_state, gradients,
-    )
-    teacher = self.update_teacher(state.teacher_weights, student, state.step)
-    new_state = State(student, teacher, optimizer_state, state.step + 1)
-    metrics = dict(metrics)
-    metrics["grad_norm"] = optax.global_norm(gradients)
-    return new_state, metrics
+def local_rate(z_local, eps):
+    return jax.lax.pmean(rate_from_moment(second_moment(z_local), eps), "data")
 ```
 
-The `State` fields are `student_weights`, `teacher_weights`, `optimizer_state`, and `step`. Notice there's no running center like in DINO. The batch second moment is just an intermediate in the loss, recomputed every step. `self.optimizer` is an Optax transformation with gradient clipping, AdamW, and a warmup/cosine learning-rate schedule, and the teacher momentum ramps toward one over training.
+Both have the same shapes, and the only difference is where the `pmean` goes. In `global_rate`, it averages the moments before the log-determinant, and in `local_rate`, it averages the rates after. When we differentiate through either one, autodiff inserts the matching collective in the backward pass.
 
-The two updates sit right next to each other. The student follows the loss gradient through AdamW, and the teacher moves toward the updated student by EMA. `Trainer.step` returns a new state without mutating the old one, and that's the interface we'll keep fixed when we change placement.
+This is an old problem. SimCLR {% cite chen2020simple %} aggregated batch-norm statistics across all devices for the same reason. Any loss term that isn't a mean over examples needs this care. A local rate can still be a reasonable choice, as long as we pick it deliberately.
 
-## Sharding it: DP, then FSDP, by changing the placement
+## Does it actually train?
 
-As in Parts 2 and 3, parallelizing this step is just a placement decision. For DP, replicate the state and split the batch. For FSDP, also shard the parameter and optimizer arrays that divide evenly:
+<!-- TODO(anurag): numbers. Candidates:
+  - k-NN / linear-probe accuracy of the backbone after N epochs.
+  - rate and feature_std over training, ideally next to a gamma = 0 run where feature_std goes to zero (collapse).
+  - global_rate vs local_rate at a small per-device batch, if the gap shows up.
+-->
 
-```python
-def compile(
-    self,
-    state: State,
-    mode="dp",
-):
-    mesh = Mesh(np.array(jax.devices()), ("data",))
-    replicated = NamedSharding(mesh, P())
-    batch_sharding = NamedSharding(mesh, P(None, "data", None, None, None))
+## Two trees, two rules, one statistic
 
-    def placement(
-        array,
-    ):
-        can_shard = array.ndim == 2 and array.shape[0] % mesh.size == 0
-        if mode == "fsdp" and can_shard:
-            return NamedSharding(mesh, P("data", None))
-        return replicated
+That's the whole mental model for self-distillation at scale. There are two parameter trees with different update rules, a gradient boundary that's a single argument, and a batch statistic that decides whether sharding changes your objective. Each of them is a line or two of JAX, and none of them needed the ViT to explain.
 
-    state_shardings = jax.tree.map(placement, state)
-    state = jax.tree.map(jax.device_put, state, state_shardings)
-    compiled = jax.jit(
-        self.step,
-        in_shardings=(state_shardings, batch_sharding),
-        out_shardings=(state_shardings, replicated),
-    )
-    return state, compiled, batch_sharding
-```
-
-The view axis stays replicated and the batch axis is sharded: `P(None, "data", None, None, None)`. So both crops of an image stay on the same device. Small arrays, and matrices whose leading dimension doesn't divide by the device count, stay replicated, so we don't blindly shard every leaf.
-
-Note that `Trainer.step` didn't change at all. Under `jit`, the arrays describe the global computation, so the contraction over `b` in `second_moment` uses the global batch even though each device holds only part of it. The compiler inserts the communication to make that true, along with the communication needed to combine parameter gradients.
-
-This is SimDINO's version of the classic distributed-statistics trap (think synced BatchNorm). Computing one coding rate per device and averaging those scalars is a different objective from computing the rate of the global second moment:
-
-$$\frac{1}{N}\sum_{p=1}^{N}\log\det(I+\alpha C_p) \neq \log\det\!\left(I+\alpha\frac{1}{N}\sum_{p=1}^{N}C_p\right).$$
-
-Here we deliberately pick the global-batch objective. Local or subsampled rate estimators are valid choices too. The point is to pick one on purpose, and not change the objective by accident when you add devices.
-
-With FSDP-style storage {% cite rajbhandari2020zero zhao2023pytorch %}, the compiler can gather sharded weights for use and reduce-scatter their gradients. The exact schedule and peak memory depend on what the compiler produces, and a sharding spec alone won't guarantee the ideal layer-by-layer schedule. When corresponding student and teacher leaves have identical placements, their EMA update is local to each shard.
-
-For a model this small, FSDP is mostly for illustration. What I care about is that the loss and the update rule survive the switch from replicated to partitioned state untouched.
-
-## Seeing the collectives with shard_map
-
-To close the loop with Part 2's vocabulary, here is the global coding-rate calculation with the collective written out. Inside `shard_map`, `z` contains only the device's local batch. For equally sized shards:
-
-```python
-def global_rate(
-    z,
-    eps,
-):
-    local_moment = second_moment(z)
-    moment = jax.lax.pmean(local_moment, "data")
-    return coding_rate_from_moment(moment, eps)
-```
-
-That `pmean` averages the matrices **before** the nonlinear log-determinant, and it belongs inside the differentiated loss. The function below returns the global loss, and we differentiate the entire sharded function, so autodiff accounts for both the shared parameters and the statistic reduction:
-
-```python
-from functools import partial
-
-@partial(jax.shard_map, mesh=mesh,
-         in_specs=(P(), P(), P(None, "data")), out_specs=P())
-def explicit_loss(
-    student,
-    teacher,
-    views,
-):
-    student_z = trainer.student.encode_views(student, views)
-    teacher_z = trainer.teacher.encode_views(teacher, views)
-    teacher_z = jax.lax.stop_gradient(teacher_z)
-    local_alignment = cross_view_alignment(student_z, teacher_z)
-    alignment = jax.lax.pmean(local_alignment, "data")
-    rate = global_rate(student_z, trainer.config.eps)
-    return alignment - trainer.config.gamma * rate
-
-
-explicit_loss_and_grads = jax.value_and_grad(explicit_loss, argnums=0)
-explicit_loss_and_grads = jax.jit(explicit_loss_and_grads)
-```
-
-There are two distinct communication roles: combine feature statistics for the chosen objective, and combine parameter gradients for DP. The forward collectives are explicit here; differentiating the global function supplies the backward communication and gradient scaling. The returned gradients already correspond to the global loss, so we do not average them again. Replacing `global_rate` with a device-local rate would retain valid array shapes while quietly changing the loss, which is exactly the kind of bug explicit collectives help you see.
-
-## Why this was the right toy
-
-A classifier demo often has one parameter tree, one update rule, and a loss separable over examples. SimDINO gives us two trees with different updates, an explicit differentiation boundary, and a loss that couples examples through a batch statistic. JAX lets us express those pieces directly, then change their placement without rewriting the objective.
-
-The companion folder contains CPU checks comparing unsharded, DP, and FSDP updates, plus commands for an ImageNet class-folder dataset. A short run checks the implementation and data path, but representation quality needs a longer run and a downstream evaluation. That's the split I want the small codebase to make easy: the training algorithm is compact enough to read in one sitting, and the experiment is still something you have to measure.
+This also wraps up the series. We went from what visual SSL methods optimize, to where arrays live across devices, to how JAX lets us write placement separately from the math. My hope is that the next time you scale up a pretraining run, you skip the flags for a moment and ask which of your statistics just stopped meaning what you think they mean.
 
 # References
 
